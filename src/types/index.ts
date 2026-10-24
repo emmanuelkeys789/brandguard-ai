@@ -1,0 +1,182 @@
+export type ReviewStatus = 'Needs review' | 'In review' | 'Approved' | 'Rejected' | 'Draft' | 'Changes Requested';
+
+export type CommunicationTone =
+  | 'Professional'
+  | 'Friendly'
+  | 'Conversational'
+  | 'Authoritative'
+  | 'Informative'
+  | 'Custom';
+
+export interface BrandProfile {
+  id: string;
+  name: string;
+  description?: string;
+  industry?: string;
+  targetAudience?: string;
+  communicationTone: CommunicationTone;
+  toneCustomDetails?: string;
+  preferredLanguage?: string;
+  additionalNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RuleCategory =
+  | 'Approved Facts'
+  | 'Required Terms'
+  | 'Prohibited Terms'
+  | 'Tone of Voice'
+  | 'Claims & Restrictions'
+  | 'Visual Guidelines'
+  | 'Accessibility'
+  | 'Other'
+  | 'Required Terminology'
+  | 'Prohibited Terminology'
+  | 'Tone and Voice'
+  | 'Claims and Restrictions'
+  | 'Claims & Evidence'
+  | 'Accessibility Guidelines'
+  | 'Terminology'
+  | 'Legal & Trademarks'
+  | 'Formatting';
+
+export type RuleSeverity = 'Critical' | 'High' | 'Medium' | 'Low';
+export type SeverityLevel = 'Critical' | 'High' | 'Medium' | 'Low' | 'Warning' | 'Advisory';
+
+export interface ReviewDecisionRecord {
+  id: string;
+  action: 'Approve' | 'Request Changes' | 'Reject' | 'Save Draft' | 'Submit Revision';
+  reviewerName: string;
+  reviewerComment?: string;
+  timestamp: string;
+  previousStatus: ReviewStatus;
+  newStatus: ReviewStatus;
+}
+
+export interface ReviewRevisionRecord {
+  id: string;
+  revisionNumber: number;
+  text: string;
+  editedAt: string;
+  findingsCount: number;
+  score: number;
+}
+
+export interface ReviewItem {
+  id: string;
+  title: string;
+  author: string;
+  channel: string;
+  status: ReviewStatus;
+  updatedAt: string;
+  wordCount: number;
+  issuesCount: number;
+  confidenceScore: number;
+  summary: string;
+  originalDraft?: string;
+  currentDraft?: string;
+  findings?: Array<{
+    id: string;
+    ruleId: string;
+    ruleTitle: string;
+    ruleCategory: RuleCategory;
+    severity: SeverityLevel;
+    matchedText?: string;
+    location?: {
+      startIndex: number;
+      endIndex: number;
+      line: number;
+    };
+    explanation: string;
+    suggestedCorrection?: string;
+    sourceDescription?: string;
+    sourceUrl?: string;
+  }>;
+  firstPassIssuesCount?: number;
+  firstPassScore?: number;
+  firstPassFindings?: Array<{
+    id: string;
+    ruleId: string;
+    ruleTitle: string;
+    ruleCategory: RuleCategory;
+    severity: SeverityLevel;
+    matchedText?: string;
+    location?: {
+      startIndex: number;
+      endIndex: number;
+      line: number;
+    };
+    explanation: string;
+    suggestedCorrection?: string;
+    sourceDescription?: string;
+    sourceUrl?: string;
+  }>;
+  decisionHistory?: ReviewDecisionRecord[];
+  revisions?: ReviewRevisionRecord[];
+  reviewerComment?: string;
+  decisionAt?: string;
+  reviewedBy?: string;
+  rulesCheckedCount?: number;
+}
+
+export interface BrandRule {
+  id: string;
+  brandId: string;
+  title: string;
+  category: RuleCategory;
+  description: string;
+  example?: string;
+  severity?: SeverityLevel;
+  sourceDescription?: string;
+  sourceUrl?: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  code?: string;
+  exampleViolation?: string;
+  remedyRecommendation?: string;
+  sourceDocument?: string;
+  isActive?: boolean;
+}
+
+export interface MetricItem {
+  label: string;
+  value: string | number;
+  change: string;
+  isPositive: boolean;
+  subtext: string;
+}
+
+export interface CarouselSlide {
+  id: string;
+  badge: string;
+  title: string;
+  tagline: string;
+  description: string;
+  keyPoints: string[];
+  mockCard: {
+    title: string;
+    status: string;
+    highlight: string;
+    pill: string;
+    stats: { label: string; val: string }[];
+  };
+}
+
+export interface WorkflowStage {
+  step: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  tag: string;
+  deliverable: string;
+}
+
+export type DashboardTab = 
+  | 'overview' 
+  | 'review' 
+  | 'guidelines' 
+  | 'history' 
+  | 'insights' 
+  | 'settings';
