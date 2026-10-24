@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { aiToneService, type AiToneReviewRequestOptions, type AiToneReviewClientResult } from './aiToneService.ts';
+import {
+  aiToneService,
+  applyTextReplacement,
+  isMeaningfulRewrite,
+  type AiToneReviewRequestOptions,
+  type AiToneReviewClientResult
+} from './aiToneService.ts';
 import {
   handleAiToneReview,
   validateAndFormatAiSuggestions,
@@ -405,6 +411,172 @@ describe('AI Tone & Context Review Tests', () => {
       // Immutable first-pass history preserved
       assert.strictEqual(updatedReview.firstPassIssuesCount, 1);
       assert.strictEqual(updatedReview.firstPassScore, 88);
+    });
+  });
+
+  describe('6. Apply to Draft Workflow & Substantive Rewrite Verification', () => {
+    it('applyTextReplacement replaces exact matching substring and updates draft immediately', () => {
+      const draft = 'BrandGuard AI delivers 100% immunity guarantees for all enterprise customers.';
+      const quoted = '100% immunity guarantees';
+      const alternative = 'comprehensive, audited security safeguards';
+
+      const res = applyTextReplacement(draft, quoted, alternative);
+      assert.strictEqual(res.success, true);
+      assert.strictEqual(res.matchType, 'exact');
+      assert.strictEqual(
+        res.newText,
+        'BrandGuard AI delivers comprehensive, audited security safeguards for all enterprise customers.'
+      );
+    });
+
+    it('applyTextReplacement handles stripped quotes and trailing punctuation in quoted text', () => {
+      const draft = 'We are the undisputed market leader outperforming all rivals.';
+      const quotedWithQuotes = '"undisputed market leader."';
+      const alternative = 'established market provider';
+
+      const res = applyTextReplacement(draft, quotedWithQuotes, alternative);
+      assert.strictEqual(res.success, true);
+      assert.ok(res.newText.includes('established market provider'));
+      assert.ok(!res.newText.includes('undisputed market leader'));
+    });
+
+    it('applyTextReplacement handles case-insensitivity seamlessly', () => {
+      const draft = 'Our tools provide world-leading compliance coverage.';
+      const quoted = 'World-Leading Compliance Coverage';
+      const alternative = 'verifiable compliance workflows';
+
+      const res = applyTextReplacement(draft, quoted, alternative);
+      assert.strictEqual(res.success, true);
+      assert.strictEqual(res.matchType, 'case-insensitive');
+      assert.strictEqual(res.newText, 'Our tools provide verifiable compliance workflows.');
+    });
+
+    it('applyTextReplacement replaces entire draft when directive is overall rewrite or text matches', () => {
+      const draft = 'We are the best.';
+      const alternative = 'We deliver reliable, tested software for modern engineering teams.';
+
+      // Case A: Overall directive
+      const resA = applyTextReplacement(draft, 'Overall draft', alternative);
+      assert.strictEqual(resA.success, true);
+      assert.strictEqual(resA.newText, alternative);
+
+      // Case B: Null/empty quotedText
+      const resB = applyTextReplacement(draft, undefined, alternative);
+      assert.strictEqual(resB.success, true);
+      assert.strictEqual(resB.newText, alternative);
+    });
+
+    it('isMeaningfulRewrite rejects identical, whitespace-only, or trivial repetitions', () => {
+      // Identical text
+      assert.strictEqual(isMeaningfulRewrite('We are the best', 'We are the best'), false);
+      // Case and punctuation normalized identical text
+      assert.strictEqual(isMeaningfulRewrite('"We are the best!"', 'We are the best'), false);
+      // Empty alternative
+      assert.strictEqual(isMeaningfulRewrite('Something', ''), false);
+      assert.strictEqual(isMeaningfulRewrite('Something', '   '), false);
+      // Substantive rewrite
+      assert.strictEqual(
+        isMeaningfulRewrite('We are the best', 'We strive to deliver verified enterprise performance'),
+        true
+      );
+    });
+
+    it('validateAndFormatAiSuggestions filters out unchanged or trivial suggestions', () => {
+      const raw = [
+        {
+          id: 'sugg_unchanged',
+          toneCategory: 'Tone & Voice',
+          severity: 'Medium',
+          quotedText: 'We are the market leaders',
+          explanation: 'Too boastful.',
+          suggestedAlternative: 'We are the market leaders', // Identical!
+          confidence: 'High'
+        },
+        {
+          id: 'sugg_valid',
+          toneCategory: 'Tone & Voice',
+          severity: 'Medium',
+          quotedText: 'We guarantee 100% zero downtime',
+          explanation: 'Absolute claims violate compliance policies.',
+          suggestedAlternative: 'We provide an industry-leading 99.99% availability SLA',
+          confidence: 'High'
+        }
+      ];
+
+      const validated = validateAndFormatAiSuggestions(raw, mockRules);
+      // The unchanged suggestion should be filtered out
+      assert.strictEqual(validated.length, 1);
+      assert.strictEqual(validated[0].id, 'sugg_valid');
+      assert.strictEqual(validated[0].suggestedAlternative, 'We provide an industry-leading 99.99% availability SLA');
+    });
+
+    it('handleAiToneReview reports error when provider returns only empty or unchanged suggestions', async () => {
+      // Mock fetch returning unchanged suggestions
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () => {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    suggestions: [
+                      {
+                        id: 'sugg_echo',
+                        toneCategory: 'Tone & Voice',
+                        severity: 'Low',
+                        quotedText: 'Hello world',
+                        explanation: 'No change',
+                        suggestedAlternative: 'Hello world' // Unchanged!
+                      }
+                    ]
+                  })
+                }
+              }
+            ]
+          }),
+          text: async () => ''
+        } as any;
+      }) as any;
+
+      try {
+        const response = await handleAiToneReview(
+          { content: 'Hello world' },
+          { openaiApiKey: 'test-key-mock' }
+        );
+
+        assert.strictEqual(response.status, 'error');
+        assert.ok(response.error?.includes('empty or unchanged suggestions'));
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('re-running checks on updated draft reflects the new evaluation while preserving original draft', () => {
+      const original = 'We are the most trusted cloud on Earth.';
+      const firstPass = evaluateDraft(original, mockRules, { brandProfile: mockProfile });
+      assert.strictEqual(firstPass.findings.length, 1); // Flags "most trusted"
+      assert.strictEqual(firstPass.score, 88);
+
+      // Apply rewrite
+      const rewriteResult = applyTextReplacement(
+        original,
+        'most trusted cloud on Earth',
+        'reliable infrastructure provider'
+      );
+      assert.strictEqual(rewriteResult.success, true);
+      const revised = rewriteResult.newText;
+
+      // Re-run checks on the revised text
+      const secondPass = evaluateDraft(revised, mockRules, { brandProfile: mockProfile });
+      assert.strictEqual(secondPass.findings.length, 0); // 0 findings now!
+      assert.strictEqual(secondPass.score, 100);
+
+      // Verify original draft and first pass findings remain distinct
+      assert.notStrictEqual(original, revised);
+      assert.strictEqual(firstPass.findings.length, 1);
+      assert.strictEqual(secondPass.findings.length, 0);
     });
   });
 });

@@ -24,7 +24,7 @@ import { useBrand } from '../../context/useBrand';
 import { Button } from '../ui/Button';
 import { GlassCard } from '../ui/GlassCard';
 import { evaluateDraft, getFindingRuleMetadata, type ReviewEngineResult, type ReviewFinding } from '../../services/ruleEngine';
-import { aiToneService } from '../../services/aiToneService';
+import { aiToneService, applyTextReplacement } from '../../services/aiToneService';
 import type { DashboardTab, AiToneSuggestion, AiAnalysisStatus } from '../../types';
 
 interface ReviewTabProps {
@@ -45,6 +45,10 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
   const [channel, setChannel] = useState('Press Release');
   const [content, setContent] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Immutable original submitted draft & first-pass baseline
+  const [originalSubmittedDraft, setOriginalSubmittedDraft] = useState<string>('');
+  const [firstPassResult, setFirstPassResult] = useState<ReviewEngineResult | null>(null);
 
   // Review Engine State
   const [reviewResult, setReviewResult] = useState<ReviewEngineResult | null>(null);
@@ -80,6 +84,8 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setDraftTitle(sample.title);
     setChannel(sample.channel);
     setContent(sample.text);
+    setOriginalSubmittedDraft('');
+    setFirstPassResult(null);
     setValidationError(null);
     setReviewResult(null);
     setSavedToHistory(false);
@@ -96,6 +102,8 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
   const handleClear = () => {
     setDraftTitle('');
     setContent('');
+    setOriginalSubmittedDraft('');
+    setFirstPassResult(null);
     setValidationError(null);
     setReviewResult(null);
     setSavedToHistory(false);
@@ -109,8 +117,8 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setActiveResultsTab('policy');
   };
 
-  const handleRunContentCheck = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRunContentCheck = (e?: React.SyntheticEvent) => {
+    if (e) e.preventDefault();
     if (!content.trim()) {
       setValidationError('Please enter or paste your draft content to initiate a review.');
       return;
@@ -131,6 +139,12 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
 
     setReviewResult(result);
     setAppliedFindingIds(new Set());
+
+    // Record immutable first-pass baseline on initial check of a draft
+    if (!originalSubmittedDraft) {
+      setOriginalSubmittedDraft(content);
+      setFirstPassResult(result);
+    }
 
     // Initialize editable corrections from finding suggestions
     const initialCorrections: Record<string, string> = {};
@@ -234,31 +248,25 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
         ? editedCorrections[finding.id]
         : finding.suggestedCorrection || '';
 
-    if (finding.matchedText && content.includes(finding.matchedText)) {
-      // Replace matching text at specific index if available, else first match
-      if (
-        finding.location &&
-        content.slice(finding.location.startIndex, finding.location.endIndex) === finding.matchedText
-      ) {
-        const before = content.slice(0, finding.location.startIndex);
-        const after = content.slice(finding.location.endIndex);
-        const newContent = before + replacement + after;
-        setContent(newContent);
-      } else {
-        const newContent = content.replace(finding.matchedText, replacement);
-        setContent(newContent);
-      }
+    if (!replacement.trim()) {
+      showToast('error', 'Empty Correction', 'The suggested correction text is empty.');
+      return;
+    }
 
+    const replaceResult = applyTextReplacement(content, finding.matchedText, replacement);
+    if (replaceResult.success) {
+      setContent(replaceResult.newText);
       setAppliedFindingIds((prev) => new Set(prev).add(finding.id));
+      setSavedToHistory(false);
       showToast(
         'success',
         'Correction Applied to Draft',
-        `Replaced "${finding.matchedText}" with "${replacement}".`
+        `Replaced "${replaceResult.originalReplacedText || finding.matchedText}" with "${replacement}".`
       );
-    } else if (!finding.matchedText && replacement) {
-      // Missing term case: append to draft
+    } else {
       setContent((prev) => `${prev} ${replacement}`);
       setAppliedFindingIds((prev) => new Set(prev).add(finding.id));
+      setSavedToHistory(false);
       showToast('success', 'Term Inserted into Draft', `Added "${replacement}".`);
     }
   };
@@ -269,21 +277,29 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
         ? editedAiCorrections[suggestion.id]
         : suggestion.suggestedAlternative || '';
 
-    if (suggestion.quotedText && content.includes(suggestion.quotedText)) {
-      const newContent = content.replace(suggestion.quotedText, replacement);
-      setContent(newContent);
+    if (!replacement.trim()) {
+      showToast('error', 'Empty Suggestion', 'The suggested alternative text is empty.');
+      return;
+    }
+
+    const replaceResult = applyTextReplacement(content, suggestion.quotedText, replacement);
+    if (replaceResult.success) {
+      setContent(replaceResult.newText);
       setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
+      setSavedToHistory(false);
       showToast(
         'success',
         'AI Suggestion Applied to Draft',
-        `Replaced "${suggestion.quotedText}" with "${replacement}".`
+        replaceResult.originalReplacedText
+          ? `Replaced "${replaceResult.originalReplacedText}" with suggestion.`
+          : 'Draft updated with suggested wording.'
       );
-    } else if (!suggestion.quotedText && replacement) {
-      setContent((prev) => `${prev} ${replacement}`);
-      setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
-      showToast('success', 'AI Suggestion Inserted', `Added "${replacement}".`);
     } else {
-      showToast('info', 'Text Not Found', 'Quoted text was not found in the current draft. You can copy the suggested wording manually.');
+      // Graceful whole-draft replacement when direct substring match is not found
+      setContent(replacement);
+      setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
+      setSavedToHistory(false);
+      showToast('success', 'AI Suggestion Applied to Draft', 'Draft updated with suggested wording.');
     }
   };
 
@@ -302,6 +318,10 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
 
     // Initial status requires editorial review; never automatically approved
     const initialStatus = 'Needs review';
+    const originalDraftText = originalSubmittedDraft || content;
+    const initialScore = firstPassResult ? firstPassResult.score : currentEvaluation.score;
+    const initialIssuesCount = firstPassResult ? firstPassResult.findings.length : currentEvaluation.findings.length;
+    const initialFindings = firstPassResult ? firstPassResult.findings : currentEvaluation.findings;
 
     const saved = saveReview({
       title,
@@ -312,13 +332,26 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
       issuesCount: currentEvaluation.findings.length,
       confidenceScore: currentEvaluation.score,
       summary: currentEvaluation.summaryText,
-      originalDraft: content,
+      originalDraft: originalDraftText,
       currentDraft: content,
       findings: currentEvaluation.findings,
-      firstPassFindings: currentEvaluation.findings,
-      firstPassIssuesCount: currentEvaluation.findings.length,
-      firstPassScore: currentEvaluation.score,
+      firstPassFindings: initialFindings,
+      firstPassIssuesCount: initialIssuesCount,
+      firstPassScore: initialScore,
       rulesCheckedCount: currentEvaluation.checkedRulesCount,
+      revisions:
+        content !== originalDraftText
+          ? [
+              {
+                id: `rev_${Date.now()}`,
+                revisionNumber: 1,
+                text: content,
+                editedAt: new Date().toISOString(),
+                findingsCount: currentEvaluation.findings.length,
+                score: currentEvaluation.score
+              }
+            ]
+          : [],
       aiSuggestions: aiSuggestions.length > 0 ? aiSuggestions : undefined,
       aiAnalysisStatus: aiStatus,
       aiAnalysisError: aiError || undefined,

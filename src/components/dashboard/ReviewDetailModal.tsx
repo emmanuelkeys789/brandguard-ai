@@ -36,7 +36,7 @@ import {
   getFindingRuleMetadata,
   type ReviewFinding
 } from '../../services/ruleEngine';
-import { aiToneService } from '../../services/aiToneService';
+import { aiToneService, applyTextReplacement } from '../../services/aiToneService';
 import { isSummaryText, deduplicateDecisionHistory } from '../../services/brandStorage';
 
 interface ReviewDetailModalProps {
@@ -281,24 +281,22 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
         ? editedCorrections[finding.id]
         : finding.suggestedCorrection || '';
 
-    if (finding.matchedText && currentDraftText.includes(finding.matchedText)) {
-      let newText: string;
-      if (
-        finding.location &&
-        currentDraftText.slice(finding.location.startIndex, finding.location.endIndex) === finding.matchedText
-      ) {
-        const before = currentDraftText.slice(0, finding.location.startIndex);
-        const after = currentDraftText.slice(finding.location.endIndex);
-        newText = before + replacement + after;
-      } else {
-        newText = currentDraftText.replace(finding.matchedText, replacement);
-      }
+    if (!replacement.trim()) {
+      showToast('error', 'Empty Correction', 'The suggested correction text is empty.');
+      return;
+    }
 
-      setCurrentDraftText(newText);
+    const replaceResult = applyTextReplacement(currentDraftText, finding.matchedText, replacement);
+    if (replaceResult.success) {
+      setCurrentDraftText(replaceResult.newText);
       setAppliedCorrectionFindingIds((prev) => new Set(prev).add(finding.id));
       setActiveDraftTab('revision');
-      showToast('success', 'Correction Applied', `Replaced "${finding.matchedText}" with "${replacement}".`);
-    } else if (!finding.matchedText && replacement) {
+      showToast(
+        'success',
+        'Correction Applied',
+        `Replaced "${replaceResult.originalReplacedText || finding.matchedText}" with "${replacement}".`
+      );
+    } else {
       setCurrentDraftText((prev) => `${prev} ${replacement}`);
       setAppliedCorrectionFindingIds((prev) => new Set(prev).add(finding.id));
       setActiveDraftTab('revision');
@@ -313,19 +311,28 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
         ? editedAiAlternatives[suggestion.id]
         : suggestion.suggestedAlternative || '';
 
-    if (suggestion.quotedText && currentDraftText.includes(suggestion.quotedText)) {
-      const newText = currentDraftText.replace(suggestion.quotedText, replacement);
-      setCurrentDraftText(newText);
+    if (!replacement.trim()) {
+      showToast('error', 'Empty Suggestion', 'The suggested alternative text is empty.');
+      return;
+    }
+
+    const replaceResult = applyTextReplacement(currentDraftText, suggestion.quotedText, replacement);
+    if (replaceResult.success) {
+      setCurrentDraftText(replaceResult.newText);
       setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
       setActiveDraftTab('revision');
-      showToast('success', 'AI Suggestion Applied', `Replaced "${suggestion.quotedText}" with "${replacement}".`);
-    } else if (!suggestion.quotedText && replacement) {
-      setCurrentDraftText((prev) => `${prev} ${replacement}`);
-      setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
-      setActiveDraftTab('revision');
-      showToast('success', 'AI Suggestion Inserted', `Inserted suggested wording into revised draft.`);
+      showToast(
+        'success',
+        'AI Suggestion Applied',
+        replaceResult.originalReplacedText
+          ? `Replaced "${replaceResult.originalReplacedText}" with suggestion.`
+          : 'Revised draft updated with suggested wording.'
+      );
     } else {
-      showToast('info', 'Text Not Found', 'Quoted text was not found in the current revised draft.');
+      setCurrentDraftText(replacement);
+      setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
+      setActiveDraftTab('revision');
+      showToast('success', 'AI Suggestion Applied', 'Revised draft updated with suggested wording.');
     }
   };
 
