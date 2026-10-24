@@ -63,6 +63,23 @@ export interface ReviewRevisionRecord {
   score: number;
 }
 
+export interface AiToneSuggestion {
+  id: string;
+  category: 'AI tone/context';
+  toneCategory: 'Tone & Voice' | 'Audience Resonance' | 'Messaging Alignment' | 'Clarity & Delivery';
+  severity: 'High' | 'Medium' | 'Low' | 'Advisory';
+  quotedText?: string;
+  explanation: string;
+  suggestedAlternative?: string;
+  confidence: 'High' | 'Medium' | 'Tentative';
+  relatedRuleId?: string;
+  relatedRuleTitle?: string;
+  hasVerifiedPolicyEvidence: boolean;
+  citationLabel: string;
+}
+
+export type AiAnalysisStatus = 'idle' | 'analyzing' | 'completed' | 'unavailable' | 'error';
+
 export interface ReviewItem {
   id: string;
   title: string;
@@ -118,6 +135,9 @@ export interface ReviewItem {
   decisionAt?: string;
   reviewedBy?: string;
   rulesCheckedCount?: number;
+  aiSuggestions?: AiToneSuggestion[];
+  aiAnalysisStatus?: AiAnalysisStatus;
+  aiAnalysisError?: string;
 }
 
 export interface BrandRule {

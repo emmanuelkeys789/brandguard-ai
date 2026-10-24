@@ -14,14 +14,18 @@ import {
   AlertTriangle,
   ExternalLink,
   Edit3,
-  Sparkles
+  Sparkles,
+  Bot,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { SAMPLE_DRAFTS } from '../../data/demoData';
 import { useBrand } from '../../context/useBrand';
 import { Button } from '../ui/Button';
 import { GlassCard } from '../ui/GlassCard';
 import { evaluateDraft, getFindingRuleMetadata, type ReviewEngineResult, type ReviewFinding } from '../../services/ruleEngine';
-import type { DashboardTab } from '../../types';
+import { aiToneService } from '../../services/aiToneService';
+import type { DashboardTab, AiToneSuggestion, AiAnalysisStatus } from '../../types';
 
 interface ReviewTabProps {
   onNavigateTab?: (tab: DashboardTab) => void;
@@ -51,6 +55,16 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
   const [editedCorrections, setEditedCorrections] = useState<Record<string, string>>({});
   const [appliedFindingIds, setAppliedFindingIds] = useState<Set<string>>(new Set());
 
+  // AI Tone Analysis State
+  const [enableAiTone, setEnableAiTone] = useState<boolean>(true);
+  const [aiStatus, setAiStatus] = useState<AiAnalysisStatus>('idle');
+  const [aiSuggestions, setAiSuggestions] = useState<AiToneSuggestion[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiProvider, setAiProvider] = useState<string | undefined>(undefined);
+  const [activeResultsTab, setActiveResultsTab] = useState<'policy' | 'ai'>('policy');
+  const [editedAiCorrections, setEditedAiCorrections] = useState<Record<string, string>>({});
+  const [appliedAiIds, setAppliedAiIds] = useState<Set<string>>(new Set());
+
   // Character and word count
   const charCount = content.length;
   const wordCount = content.trim().length === 0 ? 0 : content.trim().split(/\s+/).length;
@@ -71,6 +85,12 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setSavedToHistory(false);
     setAppliedFindingIds(new Set());
     setEditedCorrections({});
+    setAiStatus('idle');
+    setAiSuggestions([]);
+    setAiError(null);
+    setAppliedAiIds(new Set());
+    setEditedAiCorrections({});
+    setActiveResultsTab('policy');
   };
 
   const handleClear = () => {
@@ -81,6 +101,12 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setSavedToHistory(false);
     setAppliedFindingIds(new Set());
     setEditedCorrections({});
+    setAiStatus('idle');
+    setAiSuggestions([]);
+    setAiError(null);
+    setAppliedAiIds(new Set());
+    setEditedAiCorrections({});
+    setActiveResultsTab('policy');
   };
 
   const handleRunContentCheck = (e: React.FormEvent) => {
@@ -115,8 +141,91 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     }
     setEditedCorrections(initialCorrections);
 
+    // Run genuine AI Tone Review if enabled (separate advisory stream)
+    if (enableAiTone) {
+      setAiStatus('analyzing');
+      setAiError(null);
+      setAiSuggestions([]);
+      setAppliedAiIds(new Set());
+
+      aiToneService
+        .requestToneReview({
+          content,
+          brandProfile,
+          brandRules: enabledRules,
+          channel
+        })
+        .then((aiRes) => {
+          setAiStatus(aiRes.status);
+          if (aiRes.status === 'completed') {
+            setAiSuggestions(aiRes.suggestions);
+            setAiProvider(aiRes.provider);
+            const initAlts: Record<string, string> = {};
+            for (const s of aiRes.suggestions) {
+              if (s.suggestedAlternative) {
+                initAlts[s.id] = s.suggestedAlternative;
+              }
+            }
+            setEditedAiCorrections(initAlts);
+          } else if (aiRes.status === 'unavailable') {
+            setAiSuggestions([]);
+            setAiError(aiRes.error || 'AI provider credentials missing.');
+          } else {
+            setAiSuggestions([]);
+            setAiError(aiRes.error || 'Server error occurred during AI tone analysis.');
+          }
+        })
+        .catch((err: any) => {
+          setAiStatus('error');
+          setAiSuggestions([]);
+          setAiError(err?.message || 'Failed to request AI tone review.');
+        });
+    } else {
+      setAiStatus('idle');
+      setAiSuggestions([]);
+      setAiError(null);
+    }
+
     // Mark onboarding step 3 complete
     markReviewedContent();
+  };
+
+  const handleRetryAiTone = () => {
+    if (!content.trim()) return;
+    setAiStatus('analyzing');
+    setAiError(null);
+    aiToneService
+      .requestToneReview({
+        content,
+        brandProfile,
+        brandRules: enabledRules,
+        channel
+      })
+      .then((aiRes) => {
+        setAiStatus(aiRes.status);
+        if (aiRes.status === 'completed') {
+          setAiSuggestions(aiRes.suggestions);
+          setAiProvider(aiRes.provider);
+          const initAlts: Record<string, string> = {};
+          for (const s of aiRes.suggestions) {
+            if (s.suggestedAlternative) {
+              initAlts[s.id] = s.suggestedAlternative;
+            }
+          }
+          setEditedAiCorrections(initAlts);
+        } else if (aiRes.status === 'unavailable') {
+          setAiSuggestions([]);
+          setAiError(aiRes.error || 'AI provider credentials missing.');
+        } else {
+          setAiSuggestions([]);
+          setAiError(aiRes.error || 'Server error occurred during AI tone analysis.');
+        }
+      })
+      .catch((err: any) => {
+        setAiStatus('error');
+        setAiSuggestions([]);
+        setAiError(err?.message || 'Failed to request AI tone review.');
+      });
   };
 
   const handleApplyCorrection = (finding: ReviewFinding) => {
@@ -154,6 +263,30 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     }
   };
 
+  const handleApplyAiSuggestion = (suggestion: AiToneSuggestion) => {
+    const replacement =
+      editedAiCorrections[suggestion.id] !== undefined
+        ? editedAiCorrections[suggestion.id]
+        : suggestion.suggestedAlternative || '';
+
+    if (suggestion.quotedText && content.includes(suggestion.quotedText)) {
+      const newContent = content.replace(suggestion.quotedText, replacement);
+      setContent(newContent);
+      setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
+      showToast(
+        'success',
+        'AI Suggestion Applied to Draft',
+        `Replaced "${suggestion.quotedText}" with "${replacement}".`
+      );
+    } else if (!suggestion.quotedText && replacement) {
+      setContent((prev) => `${prev} ${replacement}`);
+      setAppliedAiIds((prev) => new Set(prev).add(suggestion.id));
+      showToast('success', 'AI Suggestion Inserted', `Added "${replacement}".`);
+    } else {
+      showToast('info', 'Text Not Found', 'Quoted text was not found in the current draft. You can copy the suggested wording manually.');
+    }
+  };
+
   const handleSaveToPastReviews = () => {
     if (!content.trim()) return;
 
@@ -186,6 +319,9 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
       firstPassIssuesCount: currentEvaluation.findings.length,
       firstPassScore: currentEvaluation.score,
       rulesCheckedCount: currentEvaluation.checkedRulesCount,
+      aiSuggestions: aiSuggestions.length > 0 ? aiSuggestions : undefined,
+      aiAnalysisStatus: aiStatus,
+      aiAnalysisError: aiError || undefined,
       decisionHistory: [
         {
           id: `dec_${Date.now()}`,
@@ -676,6 +812,60 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
               </div>
             )}
 
+            {/* AI Tone & Context Review Toggle */}
+            <div
+              style={{
+                marginBottom: '18px',
+                padding: '12px 14px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}
+            >
+              <label
+                htmlFor="enable-ai-tone-toggle"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  color: 'var(--text-primary)',
+                  userSelect: 'none'
+                }}
+              >
+                <input
+                  id="enable-ai-tone-toggle"
+                  type="checkbox"
+                  checked={enableAiTone}
+                  onChange={(e) => setEnableAiTone(e.target.checked)}
+                  style={{ accentColor: 'var(--accent-lime)', width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>
+                  <strong>Include AI Voice &amp; Tone Analysis:</strong> Contextual brand voice &amp; messaging audit
+                </span>
+              </label>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: 'rgba(94, 158, 255, 0.12)',
+                  border: '1px solid rgba(94, 158, 255, 0.3)',
+                  color: '#5E9EFF',
+                  flexShrink: 0
+                }}
+              >
+                ADVISORY
+              </span>
+            </div>
+
             {/* Action Bar */}
             <div
               style={{
@@ -779,206 +969,681 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
                 </div>
               </div>
 
-              {/* List of Evidence-Linked Findings */}
-              {reviewResult.findings.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {reviewResult.findings.map((finding) => {
-                    const meta = getFindingRuleMetadata(finding, rules);
-                    const sevStyle = getSeverityBadgeStyle(meta.severity);
-                    const isApplied = appliedFindingIds.has(finding.id);
-                    const currentCorrection =
-                      editedCorrections[finding.id] !== undefined
-                        ? editedCorrections[finding.id]
-                        : finding.suggestedCorrection || '';
+              {/* Segmented Switcher: Deterministic Policy Rules vs AI Tone & Context */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '6px',
+                  padding: '4px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)'
+                }}
+              >
+                <button
+                  type="button"
+                  id="tab-policy-findings-btn"
+                  onClick={() => setActiveResultsTab('policy')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-xs)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    background: activeResultsTab === 'policy' ? 'var(--accent-lime-dim)' : 'transparent',
+                    border: '1px solid',
+                    borderColor: activeResultsTab === 'policy' ? 'var(--accent-lime-border)' : 'transparent',
+                    color: activeResultsTab === 'policy' ? 'var(--accent-lime)' : 'var(--text-secondary)'
+                  }}
+                >
+                  <ShieldCheck size={14} />
+                  <span>Policy Violations ({reviewResult.findings.length})</span>
+                </button>
 
-                    return (
-                      <div
-                        key={finding.id}
-                        className="glass-panel"
-                        style={{
-                          padding: '18px 20px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '12px',
-                          border: isApplied
-                            ? '1px solid rgba(52, 211, 153, 0.4)'
-                            : '1px solid var(--border-medium)',
-                          background: isApplied ? 'rgba(52, 211, 153, 0.03)' : 'rgba(255, 255, 255, 0.02)'
-                        }}
-                      >
-                        {/* Finding Header */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span
-                              style={{
-                                fontSize: '10px',
-                                fontFamily: 'var(--font-mono)',
-                                fontWeight: 700,
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                background: sevStyle.bg,
-                                border: `1px solid ${sevStyle.border}`,
-                                color: sevStyle.color
-                              }}
-                            >
-                              {meta.severity.toUpperCase()}
-                            </span>
-                            {meta.isRuleAvailable ? (
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  padding: '2px 7px',
-                                  borderRadius: '4px',
-                                  background: 'rgba(255, 255, 255, 0.04)',
-                                  border: '1px solid var(--border-subtle)',
-                                  color: 'var(--text-secondary)'
-                                }}
-                              >
-                                {meta.category}
-                              </span>
-                            ) : (
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  padding: '2px 7px',
-                                  borderRadius: '4px',
-                                  background: 'rgba(248, 113, 113, 0.1)',
-                                  border: '1px solid rgba(248, 113, 113, 0.3)',
-                                  color: '#FCA5A5'
-                                }}
-                              >
-                                Rule Unavailable (Deleted or Unregistered)
-                              </span>
-                            )}
-                          </div>
+                <button
+                  type="button"
+                  id="tab-ai-tone-btn"
+                  onClick={() => setActiveResultsTab('ai')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-xs)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    background: activeResultsTab === 'ai' ? 'rgba(94, 158, 255, 0.12)' : 'transparent',
+                    border: '1px solid',
+                    borderColor: activeResultsTab === 'ai' ? 'rgba(94, 158, 255, 0.35)' : 'transparent',
+                    color: activeResultsTab === 'ai' ? '#5E9EFF' : 'var(--text-secondary)'
+                  }}
+                >
+                  {aiStatus === 'analyzing' ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={14} />
+                  )}
+                  <span>
+                    AI Tone Suggestions (
+                    {aiStatus === 'analyzing'
+                      ? '...'
+                      : aiStatus === 'completed'
+                      ? aiSuggestions.length
+                      : aiStatus === 'unavailable'
+                      ? 'Unconfigured'
+                      : aiStatus === 'error'
+                      ? 'Error'
+                      : '0'}
+                    )
+                  </span>
+                </button>
+              </div>
 
-                          {finding.location && (
-                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>
-                              Line {finding.location.line}
-                            </span>
-                          )}
-                        </div>
+              {/* View 1: Deterministic Policy Rule Findings */}
+              {activeResultsTab === 'policy' && (
+                <div>
+                  {reviewResult.findings.length === 0 ? (
+                    <div
+                      className="glass-panel"
+                      style={{
+                        padding: '24px',
+                        textAlign: 'center',
+                        background: 'rgba(52, 211, 153, 0.04)',
+                        border: '1px solid rgba(52, 211, 153, 0.25)'
+                      }}
+                    >
+                      <CheckCircle2 size={30} color="#34D399" style={{ margin: '0 auto 10px' }} />
+                      <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px 0' }}>
+                        No Policy Violations Detected
+                      </h4>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                        This draft satisfies all {reviewResult.checkedRulesCount} active brand rules.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {reviewResult.findings.map((finding) => {
+                        const meta = getFindingRuleMetadata(finding, rules);
+                        const sevStyle = getSeverityBadgeStyle(meta.severity);
+                        const isApplied = appliedFindingIds.has(finding.id);
+                        const currentCorrection =
+                          editedCorrections[finding.id] !== undefined
+                            ? editedCorrections[finding.id]
+                            : finding.suggestedCorrection || '';
 
-                        {/* Matched Text & Rule Attribution */}
-                        <div>
-                          {finding.matchedText && (
-                            <div style={{ marginBottom: '6px' }}>
-                              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Flagged text: </span>
-                              <span
-                                style={{
-                                  fontSize: '13px',
-                                  fontWeight: 600,
-                                  color: '#FCD34D',
-                                  background: 'rgba(251, 191, 36, 0.12)',
-                                  padding: '1px 6px',
-                                  borderRadius: '4px',
-                                  fontFamily: 'var(--font-mono)'
-                                }}
-                              >
-                                &quot;{finding.matchedText}&quot;
-                              </span>
-                            </div>
-                          )}
-
-                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
-                            Triggered by Rule: <strong style={{ color: 'var(--text-secondary)' }}>{meta.ruleTitle}</strong> (ID: {finding.ruleId})
-                          </div>
-
-                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
-                            {finding.explanation}
-                          </p>
-                        </div>
-
-                        {/* Source Citation if present on rule */}
-                        {(meta.sourceDescription || finding.sourceDescription) && (
-                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>Source: {meta.sourceDescription || finding.sourceDescription}</span>
-                            {(meta.sourceUrl || finding.sourceUrl) && (
-                              <a
-                                href={meta.sourceUrl || finding.sourceUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: 'var(--accent-lime)', display: 'inline-flex' }}
-                              >
-                                <ExternalLink size={12} />
-                              </a>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Editable Correction Suggestion */}
-                        {(finding.suggestedCorrection !== undefined || currentCorrection) && (
+                        return (
                           <div
+                            key={finding.id}
+                            className="glass-panel"
                             style={{
-                              padding: '12px 14px',
-                              borderRadius: 'var(--radius-sm)',
-                              background: 'rgba(0, 0, 0, 0.35)',
-                              border: '1px solid var(--border-subtle)',
+                              padding: '18px 20px',
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: '8px'
+                              gap: '12px',
+                              border: isApplied
+                                ? '1px solid rgba(52, 211, 153, 0.4)'
+                                : '1px solid var(--border-medium)',
+                              background: isApplied ? 'rgba(52, 211, 153, 0.03)' : 'rgba(255, 255, 255, 0.02)'
                             }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <label
-                                htmlFor={`edit-correction-${finding.id}`}
-                                style={{
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  color: 'var(--accent-lime)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px'
-                                }}
-                              >
-                                <Edit3 size={12} /> Suggested Correction (Editable):
-                              </label>
-                              {isApplied && (
-                                <span style={{ fontSize: '11px', color: '#34D399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                  <Check size={12} /> Applied to Draft
+                            {/* Finding Header */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontWeight: 700,
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    background: sevStyle.bg,
+                                    border: `1px solid ${sevStyle.border}`,
+                                    color: sevStyle.color
+                                  }}
+                                >
+                                  {meta.severity.toUpperCase()}
+                                </span>
+                                {meta.isRuleAvailable ? (
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '2px 7px',
+                                      borderRadius: '4px',
+                                      background: 'rgba(255, 255, 255, 0.04)',
+                                      border: '1px solid var(--border-subtle)',
+                                      color: 'var(--text-secondary)'
+                                    }}
+                                  >
+                                    {meta.category}
+                                  </span>
+                                ) : (
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '2px 7px',
+                                      borderRadius: '4px',
+                                      background: 'rgba(248, 113, 113, 0.1)',
+                                      border: '1px solid rgba(248, 113, 113, 0.3)',
+                                      color: '#FCA5A5'
+                                    }}
+                                  >
+                                    Rule Unavailable (Deleted or Unregistered)
+                                  </span>
+                                )}
+                              </div>
+
+                              {finding.location && (
+                                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>
+                                  Line {finding.location.line}
                                 </span>
                               )}
                             </div>
 
-                            <input
-                              id={`edit-correction-${finding.id}`}
-                              type="text"
-                              value={currentCorrection}
-                              onChange={(e) =>
-                                setEditedCorrections((prev) => ({
-                                  ...prev,
-                                  [finding.id]: e.target.value
-                                }))
-                              }
-                              placeholder="Enter replacement copy..."
-                              style={{
-                                width: '100%',
-                                padding: '8px 10px',
-                                borderRadius: 'var(--radius-xs)',
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid var(--border-medium)',
-                                color: 'var(--text-primary)',
-                                fontSize: '13px'
-                              }}
-                            />
+                            {/* Matched Text & Rule Attribution */}
+                            <div>
+                              {finding.matchedText && (
+                                <div style={{ marginBottom: '6px' }}>
+                                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Flagged text: </span>
+                                  <span
+                                    style={{
+                                      fontSize: '13px',
+                                      fontWeight: 600,
+                                      color: '#FCD34D',
+                                      background: 'rgba(251, 191, 36, 0.12)',
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                      fontFamily: 'var(--font-mono)'
+                                    }}
+                                  >
+                                    &quot;{finding.matchedText}&quot;
+                                  </span>
+                                </div>
+                              )}
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
-                              <Button
-                                variant={isApplied ? 'secondary' : 'primary'}
-                                size="sm"
-                                onClick={() => handleApplyCorrection(finding)}
-                                iconLeft={isApplied ? <Check size={13} /> : <Sparkles size={13} />}
-                              >
-                                {isApplied ? 'Re-apply Edit' : 'Apply to Draft'}
-                              </Button>
+                              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
+                                Triggered by Rule: <strong style={{ color: 'var(--text-secondary)' }}>{meta.ruleTitle}</strong> (ID: {finding.ruleId})
+                              </div>
+
+                              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+                                {finding.explanation}
+                              </p>
                             </div>
+
+                            {/* Source Citation if present on rule */}
+                            {(meta.sourceDescription || finding.sourceDescription) && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>Source: {meta.sourceDescription || finding.sourceDescription}</span>
+                                {(meta.sourceUrl || finding.sourceUrl) && (
+                                  <a
+                                    href={meta.sourceUrl || finding.sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: 'var(--accent-lime)', display: 'inline-flex' }}
+                                  >
+                                    <ExternalLink size={12} />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Editable Correction Suggestion */}
+                            {(finding.suggestedCorrection !== undefined || currentCorrection) && (
+                              <div
+                                style={{
+                                  padding: '12px 14px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  background: 'rgba(0, 0, 0, 0.35)',
+                                  border: '1px solid var(--border-subtle)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '8px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <label
+                                    htmlFor={`edit-correction-${finding.id}`}
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      color: 'var(--accent-lime)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                  >
+                                    <Edit3 size={12} /> Suggested Correction (Editable):
+                                  </label>
+                                  {isApplied && (
+                                    <span style={{ fontSize: '11px', color: '#34D399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <Check size={12} /> Applied to Draft
+                                    </span>
+                                  )}
+                                </div>
+
+                                <input
+                                  id={`edit-correction-${finding.id}`}
+                                  type="text"
+                                  value={currentCorrection}
+                                  onChange={(e) =>
+                                    setEditedCorrections((prev) => ({
+                                      ...prev,
+                                      [finding.id]: e.target.value
+                                    }))
+                                  }
+                                  placeholder="Enter replacement copy..."
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 10px',
+                                    borderRadius: 'var(--radius-xs)',
+                                    background: 'rgba(255, 255, 255, 0.04)',
+                                    border: '1px solid var(--border-medium)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '13px'
+                                  }}
+                                />
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+                                  <Button
+                                    variant={isApplied ? 'secondary' : 'primary'}
+                                    size="sm"
+                                    onClick={() => handleApplyCorrection(finding)}
+                                    iconLeft={isApplied ? <Check size={13} /> : <Sparkles size={13} />}
+                                  >
+                                    {isApplied ? 'Re-apply Edit' : 'Apply to Draft'}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* View 2: AI Tone & Context Suggestions */}
+              {activeResultsTab === 'ai' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Advisory Notice */}
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'rgba(94, 158, 255, 0.06)',
+                      border: '1px solid rgba(94, 158, 255, 0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)',
+                      lineHeight: 1.45
+                    }}
+                  >
+                    <Bot size={16} color="#5E9EFF" style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong style={{ color: '#5E9EFF' }}>AI Tone &amp; Context Suggestions:</strong> Advisory recommendations analyzing voice and messaging nuance against your brand profile ({activeBrandName}). AI suggestions are optional and do NOT alter your compliance score.
+                    </div>
+                  </div>
+
+                  {/* State: Analyzing */}
+                  {aiStatus === 'analyzing' && (
+                    <div
+                      className="glass-panel"
+                      style={{
+                        padding: '36px 24px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '12px',
+                        background: 'rgba(255, 255, 255, 0.02)'
+                      }}
+                    >
+                      <Loader2 size={30} color="#5E9EFF" className="animate-spin" />
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        Analyzing Draft Voice &amp; Tone...
                       </div>
-                    );
-                  })}
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, maxWidth: '380px' }}>
+                        Reviewing draft phrasing against brand voice, formality, and messaging alignment.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* State: Unavailable */}
+                  {aiStatus === 'unavailable' && (
+                    <div
+                      className="glass-panel"
+                      style={{
+                        padding: '22px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        background: 'rgba(251, 191, 36, 0.04)',
+                        border: '1px solid rgba(251, 191, 36, 0.25)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <AlertTriangle size={20} color="#FBBF24" />
+                        <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                          AI Provider Credentials Missing
+                        </h4>
+                      </div>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                        {aiError || 'No AI provider credentials (OPENAI_API_KEY or GEMINI_API_KEY) are configured on the server.'}
+                      </p>
+                      <div
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: 'rgba(0, 0, 0, 0.35)',
+                          border: '1px solid var(--border-subtle)',
+                          fontSize: '12px',
+                          color: 'var(--text-tertiary)',
+                          lineHeight: 1.45
+                        }}
+                      >
+                        To activate genuine AI tone analysis, set <code>OPENAI_API_KEY</code> or <code>GEMINI_API_KEY</code> in your server environment. Deterministic brand rule checks continue to operate independently.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* State: Error */}
+                  {aiStatus === 'error' && (
+                    <div
+                      className="glass-panel"
+                      style={{
+                        padding: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        background: 'rgba(248, 113, 113, 0.05)',
+                        border: '1px solid rgba(248, 113, 113, 0.25)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertCircle size={18} color="#F87171" />
+                        <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#FCA5A5', margin: 0 }}>
+                          AI Tone Review Error
+                        </h4>
+                      </div>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                        {aiError || 'An error occurred while communicating with the AI provider.'}
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button variant="secondary" size="sm" onClick={handleRetryAiTone} iconLeft={<RefreshCw size={13} />}>
+                          Retry AI Review
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* State: Idle / Disabled */}
+                  {aiStatus === 'idle' && (
+                    <div
+                      className="glass-panel"
+                      style={{
+                        padding: '24px',
+                        textAlign: 'center',
+                        background: 'rgba(255, 255, 255, 0.02)'
+                      }}
+                    >
+                      <Bot size={28} color="var(--text-tertiary)" style={{ margin: '0 auto 10px' }} />
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        AI Tone Review Inactive
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: '14px' }}>
+                        Enable &quot;Include AI Voice &amp; Tone Analysis&quot; and run the content check to analyze tone.
+                      </p>
+                      <Button variant="secondary" size="sm" onClick={handleRetryAiTone} iconLeft={<Sparkles size={13} />}>
+                        Run AI Tone Review Now
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* State: Completed with 0 Suggestions */}
+                  {aiStatus === 'completed' && aiSuggestions.length === 0 && (
+                    <div
+                      className="glass-panel"
+                      style={{
+                        padding: '24px',
+                        textAlign: 'center',
+                        background: 'rgba(52, 211, 153, 0.04)',
+                        border: '1px solid rgba(52, 211, 153, 0.25)'
+                      }}
+                    >
+                      <CheckCircle2 size={30} color="#34D399" style={{ margin: '0 auto 10px' }} />
+                      <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px 0' }}>
+                        Tone &amp; Voice Aligned
+                      </h4>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                        No tone, voice, or messaging mismatches detected for this draft. {aiProvider ? `(Analyzed via ${aiProvider})` : ''}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* State: Completed with Suggestions */}
+                  {aiStatus === 'completed' && aiSuggestions.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {aiSuggestions.map((suggestion) => {
+                        const isApplied = appliedAiIds.has(suggestion.id);
+                        const currentAlt =
+                          editedAiCorrections[suggestion.id] !== undefined
+                            ? editedAiCorrections[suggestion.id]
+                            : suggestion.suggestedAlternative || '';
+
+                        return (
+                          <div
+                            key={suggestion.id}
+                            className="glass-panel"
+                            style={{
+                              padding: '16px 18px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '10px',
+                              border: isApplied ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid rgba(94, 158, 255, 0.25)',
+                              background: isApplied ? 'rgba(52, 211, 153, 0.02)' : 'rgba(94, 158, 255, 0.02)'
+                            }}
+                          >
+                            {/* Header badges */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontWeight: 700,
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    background: 'rgba(94, 158, 255, 0.15)',
+                                    border: '1px solid rgba(94, 158, 255, 0.35)',
+                                    color: '#5E9EFF'
+                                  }}
+                                >
+                                  AI TONE / CONTEXT
+                                </span>
+
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    padding: '2px 7px',
+                                    borderRadius: '4px',
+                                    background: 'rgba(255, 255, 255, 0.04)',
+                                    border: '1px solid var(--border-subtle)',
+                                    color: 'var(--text-secondary)'
+                                  }}
+                                >
+                                  {suggestion.toneCategory}
+                                </span>
+
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    fontFamily: 'var(--font-mono)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px solid var(--border-subtle)',
+                                    color: 'var(--text-tertiary)'
+                                  }}
+                                >
+                                  {suggestion.confidence} Confidence
+                                </span>
+                              </div>
+
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontFamily: 'var(--font-mono)',
+                                  fontWeight: 600,
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  background: suggestion.severity === 'High' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                  color: suggestion.severity === 'High' ? '#FBBF24' : 'var(--text-tertiary)'
+                                }}
+                              >
+                                {suggestion.severity.toUpperCase()}
+                              </span>
+                            </div>
+
+                            {/* Quoted text if identifiable */}
+                            {suggestion.quotedText && (
+                              <div>
+                                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Identified draft phrasing: </span>
+                                <span
+                                  style={{
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    color: '#93C5FD',
+                                    background: 'rgba(94, 158, 255, 0.1)',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    fontFamily: 'var(--font-mono)'
+                                  }}
+                                >
+                                  &quot;{suggestion.quotedText}&quot;
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Explanation */}
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+                              {suggestion.explanation}
+                            </p>
+
+                            {/* Policy Evidence Attribution Badge */}
+                            <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {suggestion.hasVerifiedPolicyEvidence ? (
+                                <span
+                                  style={{
+                                    color: 'var(--accent-lime)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  <Check size={12} /> {suggestion.citationLabel}
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    color: 'var(--text-tertiary)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontStyle: 'italic'
+                                  }}
+                                >
+                                  <Info size={12} /> {suggestion.citationLabel}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Editable Suggestion Input */}
+                            {currentAlt && (
+                              <div
+                                style={{
+                                  padding: '10px 12px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  background: 'rgba(0, 0, 0, 0.35)',
+                                  border: '1px solid var(--border-subtle)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '6px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <label
+                                    htmlFor={`edit-ai-alt-${suggestion.id}`}
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      color: '#93C5FD',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                  >
+                                    <Edit3 size={11} /> Suggested Alternative (Editable):
+                                  </label>
+                                  {isApplied && (
+                                    <span style={{ fontSize: '11px', color: '#34D399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <Check size={12} /> Applied to Draft
+                                    </span>
+                                  )}
+                                </div>
+
+                                <input
+                                  id={`edit-ai-alt-${suggestion.id}`}
+                                  type="text"
+                                  value={currentAlt}
+                                  onChange={(e) =>
+                                    setEditedAiCorrections((prev) => ({
+                                      ...prev,
+                                      [suggestion.id]: e.target.value
+                                    }))
+                                  }
+                                  placeholder="Enter alternative wording..."
+                                  style={{
+                                    width: '100%',
+                                    padding: '6px 10px',
+                                    borderRadius: 'var(--radius-xs)',
+                                    background: 'rgba(255, 255, 255, 0.04)',
+                                    border: '1px solid var(--border-medium)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '12px'
+                                  }}
+                                />
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+                                  <Button
+                                    variant={isApplied ? 'secondary' : 'primary'}
+                                    size="sm"
+                                    onClick={() => handleApplyAiSuggestion(suggestion)}
+                                    iconLeft={isApplied ? <Check size={12} /> : <Sparkles size={12} />}
+                                  >
+                                    {isApplied ? 'Re-apply to Draft' : 'Apply to Draft'}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 

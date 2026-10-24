@@ -124,7 +124,10 @@ export function rowToReview(row: any): ReviewItem {
     revisions: Array.isArray(row.revisions) ? row.revisions : [],
     reviewerComment: row.reviewer_comment || undefined,
     decisionAt: row.decision_at || undefined,
-    reviewedBy: row.reviewed_by || undefined
+    reviewedBy: row.reviewed_by || undefined,
+    aiSuggestions: Array.isArray(row.ai_suggestions) ? row.ai_suggestions : undefined,
+    aiAnalysisStatus: row.ai_analysis_status || undefined,
+    aiAnalysisError: row.ai_analysis_error || undefined
   };
 }
 
@@ -153,6 +156,9 @@ export function reviewToRow(review: ReviewItem): Record<string, any> {
     reviewer_comment: review.reviewerComment || null,
     decision_at: review.decisionAt || null,
     reviewed_by: review.reviewedBy || null,
+    ai_suggestions: Array.isArray(review.aiSuggestions) ? review.aiSuggestions : [],
+    ai_analysis_status: review.aiAnalysisStatus || null,
+    ai_analysis_error: review.aiAnalysisError || null,
     updated_at: new Date().toISOString()
   };
 }

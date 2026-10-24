@@ -464,6 +464,19 @@ button {
   animation: liquidDriftB 20s ease-in-out infinite;
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 /* Respect user's reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

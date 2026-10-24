@@ -207,11 +207,14 @@ export function extractConfiguredTargets(rule: BrandRule): {
     if (colonIdx >= 0) {
       const part = rule.title.slice(colonIdx + 1).replace(/["'“‘”’`]/g, '').trim();
       if (part.length > 1) prohibitedTerms.add(part);
-    } else if (rule.description.includes(',')) {
-      // Possible comma-separated list
-      const parts = rule.description.split(',').map((p) => p.trim()).filter((p) => p.length > 1 && p.length < 50);
-      if (parts.length > 1) {
-        for (const p of parts) prohibitedTerms.add(p);
+    } else {
+      const desc = rule.description || (rule as { guidelines?: string }).guidelines || '';
+      if (desc.includes(',')) {
+        // Possible comma-separated list
+        const parts = desc.split(',').map((p: string) => p.trim()).filter((p: string) => p.length > 1 && p.length < 50);
+        if (parts.length > 1) {
+          for (const p of parts) prohibitedTerms.add(p);
+        }
       }
     }
   }
@@ -232,8 +235,9 @@ export function extractConfiguredTargets(rule: BrandRule): {
       '100% guaranteed',
       'outperforming all'
     ];
+    const descText = (rule.description || (rule as { guidelines?: string }).guidelines || '').toLowerCase();
     for (const sup of knownSuperlatives) {
-      if (rule.description.toLowerCase().includes(sup.toLowerCase())) {
+      if (descText.includes(sup.toLowerCase())) {
         claims.add(sup);
       }
     }

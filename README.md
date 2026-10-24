@@ -1,17 +1,23 @@
 # BrandGuard AI — Autonomous Brand Governance Platform
 
 > **Hackathon Round 2 Submission**  
-> Enterprise pre-publication brand compliance engine with deterministic rule evaluations, editorial review workflows, audit traceability, and hybrid cloud persistence.
+> Enterprise pre-publication brand compliance engine with deterministic rule evaluations, genuine AI tone & contextual messaging audits, human-in-the-loop review workflows, audit traceability, and hybrid cloud persistence.
+> 
+> **Live Deployment:** [https://buildguardai.netlify.app/](https://buildguardai.netlify.app/)  
+> **GitHub Repository:** [https://github.com/emmanuelkeys789/brandguard-ai](https://github.com/emmanuelkeys789/brandguard-ai)
 
 ---
 
 ## 1. Executive Summary
 
-**BrandGuard AI** is a brand governance platform designed for cross-functional marketing, legal, and regulatory compliance teams. It intercepts marketing and communications copy prior to publication, checks drafts against computable brand rules, flags prohibited claims or voice violations with exact text citations, and maintains a strict human-in-the-loop review workflow.
+**BrandGuard AI** is a brand governance platform designed for cross-functional marketing, legal, communications, and regulatory compliance teams. It intercepts marketing and communications copy prior to publication, checks drafts against computable brand rules and AI contextual tone models, flags prohibited claims or voice violations with exact text citations, and maintains a strict human-in-the-loop review workflow.
 
 ### Core Capabilities
-- **Deterministic Rule Engine:** Evaluates draft copy against configured brand guardrails (unsupported superlatives, prohibited terminology, mandatory legal disclaimers, and tone).
-- **Human Review & Revision Workflow:** Side-by-side comparison of locked original drafts against editable revised versions with instantaneous re-evaluation upon editing.
+- **Deterministic Rule Engine:** Evaluates draft copy against configured brand guardrails (unsupported superlatives, prohibited terminology, mandatory legal disclaimers, trademark casing, and approved facts).
+- **Genuine AI Tone & Context Review:** Secure server-side LLM analysis (OpenAI / Gemini) auditing draft tone, voice consistency, audience alignment, and messaging resonance against saved brand guidelines.
+- **Strict Evidence Attribution & Hallucination Prevention:** Flags lacking genuine policy citations are explicitly designated as `"AI Suggestion (No verified policy evidence)"`. Never fabricates policies, guidelines, or citations.
+- **Untrusted Draft Isolation:** User draft input is enclosed in `<UNTRUSTED_DRAFT_CONTENT>` data boundaries with strict anti-prompt-injection directives.
+- **Human Review & Revision Workflow:** Side-by-side comparison of locked original drafts against editable revised versions with instantaneous re-evaluation upon editing. AI suggestions are optional and editable; AI never automatically approves, rejects, or publishes.
 - **Immutable Audit Trail:** Retains immutable first-pass violation counts and scores to track genuine organizational compliance velocity across subsequent draft revisions.
 - **Audit Export:** Export complete historical audit trails and reviewer decisions as formatted CSV.
 - **Portfolio Trends & Insights:** Aggregates recurring policy violations and channel compliance rates computed directly from audited review data.
@@ -27,6 +33,11 @@
 - **Testing:** Native Node.js test runner (`node:test`, `node:assert/strict`) with zero runtime overhead
 - **Linter:** Oxlint (`oxlint`) — sub-100ms multi-threaded static analysis
 - **Database / Backend:** Supabase PostgreSQL (`@supabase/supabase-js` v2) with Row Level Security (RLS)
+- **Serverless / Edge Functions:**
+  - Netlify Functions v2 (`netlify/functions/ai-tone-review.ts`)
+  - Vercel Serverless Functions (`api/ai-tone-review.ts`)
+  - Supabase Edge Functions (`supabase/functions/ai-tone-review/index.ts`)
+  - Local Vite Dev Middleware proxy (`vite.config.ts`)
 
 ---
 
@@ -40,14 +51,14 @@
 
 ```bash
 # 1. Clone repository & install dependencies
-git clone <repository-url>
-cd "code axis project"
+git clone https://github.com/emmanuelkeys789/brandguard-ai.git
+cd "brandguard-ai"
 npm install
 
-# 2. Run automated test suite (50 passing unit tests)
+# 2. Run automated test suite (60 passing unit & integration tests)
 npm test
 
-# 3. Run linter (0 errors, 0 warnings)
+# 3. Run linter (0 errors, 0 warnings across 51 files)
 npm run lint
 
 # 4. Run production build
@@ -61,7 +72,43 @@ The app will be available locally at `http://localhost:5173/`.
 
 ---
 
-## 4. Storage Architecture: Local-First with Supabase Cloud Sync
+## 4. Architecture & Security: AI Tone Review & Rule Engine
+
+```
+                             +----------------------------------------+
+                             |           BrandGuard AI Client         |
+                             |  - Deterministic Policy Rule Engine    |
+                             |  - Locked Original & Editable Draft    |
+                             |  - Human Reviewer Decision Controls    |
+                             +----------------------------------------+
+                                         |                  |
+                    (Deterministic Local)|                  | (Optional Async POST)
+                                         v                  v
+                       +-------------------+   +----------------------------+
+                       | RuleEngine.ts     |   | /api/ai-tone-review        |
+                       | - Approved Facts  |   | (Netlify/Vercel/Supabase)  |
+                       | - Prohibited Terms|   +----------------------------+
+                       | - Claims & Superl.|                |
+                       | - Trademark Casing|                v (Server Secrets Only)
+                       +-------------------+   +----------------------------+
+                                               | Server-Side LLM Provider   |
+                                               | - OpenAI gpt-4o-mini       |
+                                               | - Google gemini-1.5-flash  |
+                                               | - 15s AbortController      |
+                                               | - <UNTRUSTED_DRAFT_CONTENT>|
+                                               | - Evidence Verification    |
+                                               +----------------------------+
+```
+
+### Deterministic vs. AI Separation
+1. **Separation in UI:** Separate segmented switcher displays `Policy Rule Findings` (deterministic rule violations) vs. `AI Tone Suggestions` (advisory stylistic findings).
+2. **Separation in Data Model:** Deterministic findings populate `review.findings` and strictly drive `confidenceScore`, `issuesCount`, and `firstPassScore`. AI suggestions populate `review.aiSuggestions` and never alter compliance scores.
+3. **Editable Suggestions:** AI suggestions can be reviewed and applied to the revised draft with a single click (`Apply to Draft`), allowing the human reviewer to edit phrasing before rerunning checks.
+4. **Authoritative Human Decisions:** AI never approves, rejects, or publishes drafts. Only human reviewers execute workflow decisions.
+
+---
+
+## 5. Storage Architecture: Local-First with Supabase Cloud Sync
 
 BrandGuard AI implements a **Repository Pattern** (`brandRepository`) that decouples UI components from persistence mechanisms:
 
@@ -95,83 +142,79 @@ BrandGuard AI implements a **Repository Pattern** (`brandRepository`) that decou
    - All reviews, brand guidelines, and profile configurations persist across refreshes.
    - The UI explicitly indicates `LocalStorage Mode (Offline Ready)` in **Settings**. It never pretends a cloud connection exists.
 2. **Supabase PostgreSQL Mode (Configured):**
-   - When `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are provided in `.env`, the repository pings the database and rehydrates state from cloud PostgreSQL tables.
+   - When `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are provided, the repository rehydrates state from cloud PostgreSQL tables.
    - All saves, edits, approvals, and deletions upsert directly into PostgreSQL.
    - Includes 1-click **"Sync Local Data to Database"** to migrate local records without duplicate entries.
 
 ---
 
-## 5. Supabase Database Setup Guide
+## 6. Environment Variables Configuration
 
-To connect BrandGuard AI to a live Supabase PostgreSQL instance:
+Refer to [`.env.example`](file:///Users/apple/Desktop/code%20axis%20project/.env.example) for exact templates.
 
-### Step 1: Create a Free Supabase Project
-1. Go to [supabase.com](https://supabase.com) and create a new project.
+### Public Client Environment Variables
+```env
+# Optional: Supabase PostgreSQL Cloud Database
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-public-api-key-here
+```
 
-### Step 2: Run Database Schema
-1. In the Supabase project dashboard, open the **SQL Editor** on the left menu.
-2. Open `supabase/schema.sql` from this repository, paste the entire SQL content into the SQL Editor, and click **Run**.
-3. Verify that three tables are created:
-   - `brand_profiles`: Enterprise brand identity and tone settings.
-   - `brand_rules`: Computable brand guardrails and policy citations.
-   - `brand_reviews`: Locked original drafts, revised drafts, JSONB findings, JSONB decision history, and first-pass metrics.
+### Server-Side AI Provider Secrets (Never prefix with `VITE_`)
+```env
+# Serverless / Edge Function Secrets:
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
 
-### Step 3: Configure Environment Variables
-1. In Supabase, navigate to **Project Settings** -> **API**.
-2. Copy your **Project URL** and **anon / public** API key.
-3. In the project root, create a file named `.env` (copied from `.env.example`):
-   ```env
-   VITE_SUPABASE_URL=https://your-project-id.supabase.co
-   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-   ```
-4. Restart the Vite dev server (`npm run dev`).
-5. In BrandGuard AI, navigate to **Settings** -> **Storage Backend & Database**, verify the green **"Connected to Supabase PostgreSQL"** status badge, and click **"Sync Local Data to Database"**.
+# Alternative / Fallback Provider:
+# GEMINI_API_KEY=AIza...
+# GEMINI_MODEL=gemini-1.5-flash
+```
 
----
-
-## 6. Security & Row Level Security (RLS) Disclosure
-
-- **Zero Secret Key Exposure:** Frontend code only accesses the public anonymous key (`VITE_SUPABASE_ANON_KEY`). The service-role key is never included or exposed.
-- **Ignored Secrets:** `.gitignore` explicitly prevents `.env` and `.env.*` files from being committed. Only `.env.example` is tracked.
-- **Row Level Security (RLS):**
-  - RLS is explicitly enabled on all database tables in `supabase/schema.sql`.
-  - **Demo Posture Limitation:** Because this hackathon project currently features an open workspace without user authentication, the default RLS policies allow the anonymous role (`anon`) to read and upsert workspace records.
-  - **Production Roadmap:** For multi-tenant enterprise production, user authentication (e.g. Supabase Auth via `auth.uid()`) must be integrated to restrict table reads/writes strictly to authorized organization tenant IDs.
+> [!NOTE]
+> When server AI credentials are not configured, BrandGuard AI safely reports `status: 'unavailable'` and guides the user on how to configure API keys. Deterministic checks continue operating with 100% functionality.
 
 ---
 
-## 7. Public Deployment Configuration (Vercel & Netlify)
+## 7. Public Deployment (Netlify & Vercel)
 
-The project is pre-configured for single-page application (SPA) deep linking and direct page refreshes:
+BrandGuard AI is deployed live at **[https://buildguardai.netlify.app/](https://buildguardai.netlify.app/)**.
 
-- **Build Command:** `npm run build` (or `tsc -b && vite build`)
-- **Output Directory:** `dist`
-- **Vercel SPA Rewrites:** Configured in `vercel.json` (`/(.*) -> /index.html`).
-- **Netlify SPA Redirects:** Configured in `public/_redirects` (`/* /index.html 200`).
-- **Environment Variables for Production Deployment:**
-  - In Vercel / Netlify dashboard, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as production environment variables (optional; app automatically defaults to LocalStorage fallback if omitted).
+- **Netlify Configuration:**
+  - Build command: `npm run build`
+  - Publish directory: `dist`
+  - SPA Rewrites: Configured in `public/_redirects` (`/* /index.html 200`) and `netlify.toml`.
+  - Functions: `netlify/functions/ai-tone-review.ts` automatically serves `POST /api/ai-tone-review`.
+- **Vercel Configuration:**
+  - Configured in `vercel.json` and `api/ai-tone-review.ts`.
 
 ---
 
 ## 8. Verification & Test Suite
 
-All 50 unit and integration tests execute in ~320ms using Node.js:
+All 60 unit and integration tests execute in ~440ms using native Node.js:
 
 ```bash
 $ npm test
 
+▶ AI Tone & Context Review Tests
+  ▶ 1. Schema Validation & Policy Evidence Attribution (3 tests passed)
+  ▶ 2. Missing Credentials & Provider Unavailable Handling (2 tests passed)
+  ▶ 3. Malformed AI Output & Network Error Handling (2 tests passed)
+  ▶ 4. Prompt Injection & Untrusted Input Isolation (1 test passed)
+  ▶ 5. Separation of AI Suggestions from Deterministic Rule Engine (2 tests passed)
+✔ AI Tone & Context Review Tests (25ms)
 ▶ Database Repository & Data Mappers Tests
   ▶ PostgreSQL Row Mappers (3 tests passed)
   ▶ Offline & Unconfigured Environment Handling (7 tests passed)
   ▶ Mocked Supabase Operations & Remote Error Surfacing (7 tests passed)
-✔ Database Repository & Data Mappers Tests (48ms)
+✔ Database Repository & Data Mappers Tests (51ms)
 ▶ Trends & Insights Analytics Tests (8 tests passed)
 ▶ Human Review and Approval Workflow Tests (17 tests passed)
 ▶ Deterministic Rule Engine Tests (8 tests passed)
 
-ℹ tests 50
-ℹ suites 7
-ℹ pass 50
+ℹ tests 60
+ℹ suites 13
+ℹ pass 60
 ℹ fail 0
 ```
 
@@ -179,11 +222,21 @@ Lint and build validations:
 ```bash
 $ npm run lint
 Found 0 warnings and 0 errors.
+Finished in 83ms on 51 files with 116 rules using 8 threads.
 
 $ npm run build
-dist/assets/vendor-icons.js      24.59 kB │ gzip:  8.68 kB
+dist/assets/vendor-icons.js      25.05 kB │ gzip:  8.84 kB
 dist/assets/vendor-react.js      210.91 kB │ gzip: 65.85 kB
 dist/assets/vendor-supabase.js   214.38 kB │ gzip: 55.16 kB
-dist/assets/index.js             269.94 kB │ gzip: 52.94 kB
-✓ built in 372ms
+dist/assets/index.js             299.48 kB │ gzip: 58.53 kB
+✓ built in 394ms
 ```
+
+---
+
+## 9. Reserved Features for Round 3
+
+In adherence to Round 2 hackathon scope and stability mandates, the following features are intentionally reserved for Round 3:
+1. **Uploaded-Image & Visual Brand Asset Inspection:** Multi-modal analysis of uploaded raster/vector logos, color contrast ratios in images, and automated alt-text generation.
+2. **Enterprise Role-Based Access Control (RBAC):** Organization-level creator vs. reviewer permissions, SSO integration, and multi-tenant department routing.
+3. **Automated Publishing Webhooks:** Integrations to publish approved copy directly to CMS or social channels.

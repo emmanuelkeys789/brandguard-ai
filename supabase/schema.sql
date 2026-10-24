@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS brand_reviews (
   reviewer_comment TEXT,
   decision_at TIMESTAMPTZ,
   reviewed_by TEXT,
+  ai_suggestions JSONB DEFAULT '[]'::jsonb NOT NULL,
+  ai_analysis_status TEXT,
+  ai_analysis_error TEXT,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
