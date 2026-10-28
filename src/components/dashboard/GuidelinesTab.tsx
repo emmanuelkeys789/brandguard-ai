@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Download, ShieldCheck } from 'lucide-react';
+import { Plus, Download, ShieldCheck, Lock } from 'lucide-react';
 import { useBrand } from '../../context/useBrand';
+import { useAuth } from '../../context/useAuth';
 import { BrandProfileCard } from '../guidelines/BrandProfileCard';
 import { BrandProfileModal } from '../guidelines/BrandProfileModal';
 import { RuleList } from '../guidelines/RuleList';
@@ -22,6 +23,7 @@ export const GuidelinesTab: React.FC = () => {
     dismissToast,
     showToast
   } = useBrand();
+  const { can } = useAuth();
 
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [ruleModalOpen, setRuleModalOpen] = useState(false);
@@ -31,16 +33,28 @@ export const GuidelinesTab: React.FC = () => {
   const [ruleToDelete, setRuleToDelete] = useState<BrandRule | null>(null);
 
   const handleOpenAddRule = () => {
+    if (!can('manage_rules')) {
+      showToast('error', 'Permission Denied', 'Only workspace Admins can create new brand rules.');
+      return;
+    }
     setEditingRule(null);
     setRuleModalOpen(true);
   };
 
   const handleOpenEditRule = (rule: BrandRule) => {
+    if (!can('manage_rules')) {
+      showToast('error', 'Permission Denied', 'Only workspace Admins can edit brand rules.');
+      return;
+    }
     setEditingRule(rule);
     setRuleModalOpen(true);
   };
 
   const handleOpenDeleteRule = (rule: BrandRule) => {
+    if (!can('manage_rules')) {
+      showToast('error', 'Permission Denied', 'Only workspace Admins can delete brand rules.');
+      return;
+    }
     setRuleToDelete(rule);
     setDeleteModalOpen(true);
   };
@@ -134,15 +148,29 @@ export const GuidelinesTab: React.FC = () => {
             Export Policy JSON
           </Button>
 
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleOpenAddRule}
-            iconLeft={<Plus size={14} />}
-            id="guidelines-add-rule-btn"
-          >
-            New Rule
-          </Button>
+          {can('manage_rules') ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleOpenAddRule}
+              iconLeft={<Plus size={14} />}
+              id="guidelines-add-rule-btn"
+            >
+              New Rule
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled
+              style={{ opacity: 0.6, cursor: 'not-allowed' }}
+              iconLeft={<Lock size={14} />}
+              id="guidelines-add-rule-btn-disabled"
+              title="Admin role required to configure brand rules"
+            >
+              New Rule (Admin Only)
+            </Button>
+          )}
         </div>
       </div>
 
@@ -159,8 +187,21 @@ export const GuidelinesTab: React.FC = () => {
 
         <BrandProfileCard
           profile={brandProfile}
-          onEdit={() => setProfileModalOpen(true)}
-          onCreate={() => setProfileModalOpen(true)}
+          onEdit={() => {
+            if (!can('manage_profile')) {
+              showToast('error', 'Permission Denied', 'Only workspace Admins can edit the brand profile.');
+              return;
+            }
+            setProfileModalOpen(true);
+          }}
+          onCreate={() => {
+            if (!can('manage_profile')) {
+              showToast('error', 'Permission Denied', 'Only workspace Admins can configure the brand profile.');
+              return;
+            }
+            setProfileModalOpen(true);
+          }}
+          canManageProfile={can('manage_profile')}
         />
       </section>
 
@@ -181,6 +222,7 @@ export const GuidelinesTab: React.FC = () => {
           onEditRule={handleOpenEditRule}
           onDeleteRule={handleOpenDeleteRule}
           onToggleRule={toggleRuleEnabled}
+          canManageRules={can('manage_rules')}
         />
       </section>
 

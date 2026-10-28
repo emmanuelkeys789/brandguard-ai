@@ -17,7 +17,8 @@ import {
   Sparkles,
   Bot,
   RefreshCw,
-  Loader2
+  Loader2,
+  Eye
 } from 'lucide-react';
 import { SAMPLE_DRAFTS } from '../../data/demoData';
 import { useBrand } from '../../context/useBrand';
@@ -25,7 +26,22 @@ import { Button } from '../ui/Button';
 import { GlassCard } from '../ui/GlassCard';
 import { evaluateDraft, getFindingRuleMetadata, type ReviewEngineResult, type ReviewFinding } from '../../services/ruleEngine';
 import { aiToneService, applyTextReplacement } from '../../services/aiToneService';
-import type { DashboardTab, AiToneSuggestion, AiAnalysisStatus } from '../../types';
+import { useAuth } from '../../context/useAuth';
+import { ImageUploadZone } from '../review/ImageUploadZone';
+import { VisualFindingsCard } from '../review/VisualFindingsCard';
+import {
+  multimodalService,
+  readFileAsBase64,
+  generateThumbnail
+} from '../../services/multimodalReview';
+import type {
+  DashboardTab,
+  AiToneSuggestion,
+  AiAnalysisStatus,
+  ImageAsset,
+  VisualAnalysisFinding,
+  VisualAnalysisStatus
+} from '../../types';
 
 interface ReviewTabProps {
   onNavigateTab?: (tab: DashboardTab) => void;
@@ -40,6 +56,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     markUnderstoodResults,
     showToast
   } = useBrand();
+  const { currentUser, can } = useAuth();
 
   const [draftTitle, setDraftTitle] = useState('');
   const [channel, setChannel] = useState('Press Release');
@@ -65,9 +82,19 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
   const [aiSuggestions, setAiSuggestions] = useState<AiToneSuggestion[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiProvider, setAiProvider] = useState<string | undefined>(undefined);
-  const [activeResultsTab, setActiveResultsTab] = useState<'policy' | 'ai'>('policy');
   const [editedAiCorrections, setEditedAiCorrections] = useState<Record<string, string>>({});
   const [appliedAiIds, setAppliedAiIds] = useState<Set<string>>(new Set());
+
+  // Multimodal Creative Compliance State
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageAltText, setImageAltText] = useState<string>('');
+  const [visualStatus, setVisualStatus] = useState<VisualAnalysisStatus>('idle');
+  const [visualFindings, setVisualFindings] = useState<VisualAnalysisFinding[]>([]);
+  const [visualError, setVisualError] = useState<string | null>(null);
+  const [visualProvider, setVisualProvider] = useState<string | undefined>(undefined);
+  const [visualModel, setVisualModel] = useState<string | undefined>(undefined);
+  const [activeResultsTab, setActiveResultsTab] = useState<'policy' | 'ai' | 'visual'>('policy');
 
   // Character and word count
   const charCount = content.length;
@@ -78,6 +105,61 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
   );
   const enabledRulesCount = enabledRules.length;
   const activeBrandName = brandProfile?.name || 'Default Workspace';
+
+  const handleSelectImage = (file: File) => {
+    setSelectedImageFile(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+    setVisualStatus('idle');
+    setVisualFindings([]);
+    setVisualError(null);
+  };
+
+  const handleRemoveImage = () => {
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setSelectedImageFile(null);
+    setImagePreviewUrl(null);
+    setImageAltText('');
+    setVisualStatus('idle');
+    setVisualFindings([]);
+    setVisualError(null);
+    if (activeResultsTab === 'visual') {
+      setActiveResultsTab('policy');
+    }
+  };
+
+  const handleRetryVisual = () => {
+    if (!selectedImageFile) return;
+    setVisualStatus('analyzing');
+    setVisualError(null);
+
+    readFileAsBase64(selectedImageFile)
+      .then(async ({ base64 }) => {
+        const visRes = await multimodalService.requestVisualReview({
+          imageBase64: base64,
+          mimeType: selectedImageFile.type,
+          fileName: selectedImageFile.name,
+          fileSizeBytes: selectedImageFile.size,
+          altText: imageAltText,
+          brandProfile,
+          brandRules: enabledRules,
+          channel
+        });
+
+        setVisualStatus(visRes.status);
+        setVisualFindings(visRes.visualFindings);
+        setVisualProvider(visRes.provider);
+        setVisualModel(visRes.model);
+        if (visRes.status === 'error') {
+          setVisualError(visRes.error || 'Visual creative analysis encountered an error.');
+        }
+      })
+      .catch((err: any) => {
+        setVisualStatus('error');
+        setVisualError(err?.message || 'Failed to read image file.');
+      });
+  };
 
   const handleLoadSample = (type: 'unverified' | 'compliant') => {
     const sample = SAMPLE_DRAFTS[type];
@@ -97,6 +179,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setAppliedAiIds(new Set());
     setEditedAiCorrections({});
     setActiveResultsTab('policy');
+    handleRemoveImage();
   };
 
   const handleClear = () => {
@@ -115,6 +198,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setAppliedAiIds(new Set());
     setEditedAiCorrections({});
     setActiveResultsTab('policy');
+    handleRemoveImage();
   };
 
   const handleRunContentCheck = (e?: React.SyntheticEvent) => {
@@ -198,6 +282,43 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
       setAiStatus('idle');
       setAiSuggestions([]);
       setAiError(null);
+    }
+
+    // Run multimodal creative analysis if an image is attached
+    if (selectedImageFile) {
+      setVisualStatus('analyzing');
+      setVisualError(null);
+      setVisualFindings([]);
+
+      readFileAsBase64(selectedImageFile)
+        .then(async ({ base64 }) => {
+          const visRes = await multimodalService.requestVisualReview({
+            imageBase64: base64,
+            mimeType: selectedImageFile.type,
+            fileName: selectedImageFile.name,
+            fileSizeBytes: selectedImageFile.size,
+            altText: imageAltText,
+            brandProfile,
+            brandRules: enabledRules,
+            channel
+          });
+
+          setVisualStatus(visRes.status);
+          setVisualFindings(visRes.visualFindings);
+          setVisualProvider(visRes.provider);
+          setVisualModel(visRes.model);
+          if (visRes.status === 'error') {
+            setVisualError(visRes.error || 'Visual creative analysis encountered an error.');
+          }
+        })
+        .catch((err: any) => {
+          setVisualStatus('error');
+          setVisualError(err?.message || 'Failed to read image file.');
+        });
+    } else {
+      setVisualStatus('idle');
+      setVisualFindings([]);
+      setVisualError(null);
     }
 
     // Mark onboarding step 3 complete
@@ -303,7 +424,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     }
   };
 
-  const handleSaveToPastReviews = () => {
+  const handleSaveToPastReviews = async () => {
     if (!content.trim()) return;
 
     const title = draftTitle.trim() || `Draft Check - ${channel}`;
@@ -323,9 +444,29 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     const initialIssuesCount = firstPassResult ? firstPassResult.findings.length : currentEvaluation.findings.length;
     const initialFindings = firstPassResult ? firstPassResult.findings : currentEvaluation.findings;
 
+    let thumbnailDataUrl: string | undefined;
+    if (selectedImageFile) {
+      try {
+        thumbnailDataUrl = await generateThumbnail(selectedImageFile, 120);
+      } catch {
+        // Thumbnail generation fallback
+      }
+    }
+
+    const imageAsset: ImageAsset | undefined = selectedImageFile
+      ? {
+          id: `img_${Date.now()}`,
+          fileName: selectedImageFile.name,
+          fileType: selectedImageFile.type,
+          fileSize: selectedImageFile.size,
+          altText: imageAltText.trim() || undefined,
+          thumbnailDataUrl
+        }
+      : undefined;
+
     const saved = saveReview({
       title,
-      author: 'Workspace Reviewer',
+      author: currentUser.name,
       channel,
       status: initialStatus,
       wordCount: content.trim().split(/\s+/).filter(Boolean).length,
@@ -339,6 +480,12 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
       firstPassIssuesCount: initialIssuesCount,
       firstPassScore: initialScore,
       rulesCheckedCount: currentEvaluation.checkedRulesCount,
+      imageAsset,
+      visualFindings: visualFindings.length > 0 ? visualFindings : undefined,
+      visualAnalysisStatus: visualStatus,
+      visualAnalysisError: visualError || undefined,
+      visualProvider,
+      visualModel,
       revisions:
         content !== originalDraftText
           ? [
@@ -359,7 +506,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
         {
           id: `dec_${Date.now()}`,
           action: 'Save Draft',
-          reviewerName: 'Workspace Reviewer',
+          reviewerName: currentUser.name,
           reviewerComment: currentEvaluation.isCompliant
             ? 'Deterministic check passed (0 rule violations). Awaiting human review sign-off.'
             : `Flagged ${currentEvaluation.findings.length} rule violation(s) requiring human editorial review.`,
@@ -845,6 +992,18 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
               </div>
             )}
 
+            {/* Multimodal Creative Asset Upload Zone */}
+            <div style={{ marginBottom: '18px' }}>
+              <ImageUploadZone
+                onFileSelect={handleSelectImage}
+                onFileRemove={handleRemoveImage}
+                selectedFile={selectedImageFile}
+                previewUrl={imagePreviewUrl}
+                altText={imageAltText}
+                onAltTextChange={setImageAltText}
+              />
+            </div>
+
             {/* AI Tone & Context Review Toggle */}
             <div
               style={{
@@ -1078,6 +1237,49 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
                     )
                   </span>
                 </button>
+
+                {(selectedImageFile || visualFindings.length > 0 || visualStatus !== 'idle') && (
+                  <button
+                    type="button"
+                    id="tab-visual-findings-btn"
+                    onClick={() => setActiveResultsTab('visual')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-xs)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      background: activeResultsTab === 'visual' ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
+                      border: '1px solid',
+                      borderColor: activeResultsTab === 'visual' ? 'rgba(56, 189, 248, 0.35)' : 'transparent',
+                      color: activeResultsTab === 'visual' ? '#38BDF8' : 'var(--text-secondary)'
+                    }}
+                  >
+                    {visualStatus === 'analyzing' ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Eye size={14} />
+                    )}
+                    <span>
+                      Visual Compliance (
+                      {visualStatus === 'analyzing'
+                        ? '...'
+                        : visualStatus === 'completed'
+                        ? visualFindings.length
+                        : visualStatus === 'unavailable'
+                        ? (visualFindings.length > 0 ? `${visualFindings.length}` : 'Unconfigured')
+                        : visualStatus === 'error'
+                        ? 'Error'
+                        : '0'}
+                      )
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* View 1: Deterministic Policy Rule Findings */}
@@ -1680,15 +1882,31 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
                 </div>
               )}
 
+              {/* View 3: Multimodal Visual & Accessibility Compliance */}
+              {activeResultsTab === 'visual' && (
+                <VisualFindingsCard
+                  findings={visualFindings}
+                  status={visualStatus}
+                  error={visualError}
+                  provider={visualProvider}
+                  model={visualModel}
+                  onRetry={handleRetryVisual}
+                  previewUrl={imagePreviewUrl}
+                  altText={imageAltText}
+                />
+              )}
+
               {/* Bottom Actions: Save to Past Reviews and Re-run Check */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', paddingTop: '8px' }}>
                 <Button
                   variant="primary"
                   size="sm"
                   onClick={handleSaveToPastReviews}
-                  iconLeft={savedToHistory ? <Check size={14} /> : <Save size={14} />}
+                  iconLeft={savedToHistory ? <Check size={14} /> : (can('approve_review') ? <Save size={14} /> : <Send size={14} />)}
                 >
-                  {savedToHistory ? 'Saved to Past Reviews' : 'Save Review to Past Reviews'}
+                  {savedToHistory
+                    ? 'Saved to Past Reviews'
+                    : (can('approve_review') ? 'Save Review to Past Reviews' : 'Submit Draft for Review')}
                 </Button>
 
                 <Button

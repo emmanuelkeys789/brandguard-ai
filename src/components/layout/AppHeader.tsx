@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useBrand } from '../../context/useBrand';
+import { useAuth } from '../../context/useAuth';
+import { getRoleBadgeColors } from '../../services/rbac';
 
 interface AppHeaderProps {
   onToggleMobileSidebar: () => void;
@@ -23,7 +25,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onNewReviewClick
 }) => {
   const { brandProfile } = useBrand();
+  const { currentRole, currentUser, switchRole, availableUsers } = useAuth();
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   
@@ -31,6 +35,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   
   const currentBrandName = brandProfile?.name || 'Axiom Global Enterprise';
   const selectedOrg = userSelectedOrg ?? currentBrandName;
+  const roleColors = getRoleBadgeColors(currentRole);
 
   const workspaces = [currentBrandName, 'Acme Consumer Brand', 'Nova Biotech Lab'];
 
@@ -149,8 +154,192 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         </div>
 
-        {/* Right: Quick Action, Notifications, Help */}
+        {/* Right: Demo Role Selector, Quick Action, Notifications, Help */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Demo Role / Simulated User Selector */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+              aria-label="Demo Role Selector"
+              id="header-role-selector-btn"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '5px 12px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: `1px solid ${roleColors.border}`,
+                color: 'var(--text-primary)',
+                cursor: 'pointer'
+              }}
+            >
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  background: roleColors.bg,
+                  border: `1px solid ${roleColors.border}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: roleColors.color,
+                  fontSize: '11px',
+                  fontWeight: 700
+                }}
+              >
+                {currentUser.avatarInitials}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 700,
+                      color: 'var(--text-tertiary)',
+                      letterSpacing: '0.04em'
+                    }}
+                  >
+                    DEMO ROLE:
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      color: roleColors.color,
+                      background: roleColors.bg,
+                      padding: '1px 6px',
+                      borderRadius: 'var(--radius-full)'
+                    }}
+                  >
+                    {currentRole}
+                  </span>
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                  {currentUser.name}
+                </span>
+              </div>
+
+              <ChevronDown size={14} color="var(--text-tertiary)" />
+            </button>
+
+            {roleMenuOpen && (
+              <div
+                className="glass-panel"
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  right: 0,
+                  width: '320px',
+                  padding: '14px',
+                  zIndex: 70,
+                  boxShadow: 'var(--shadow-lg)'
+                }}
+              >
+                <div style={{ paddingBottom: '10px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--accent-lime)' }}>
+                      SIMULATED DEMO ROLE
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                      Evaluation Only
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
+                    Switch persona to test client-side permission enforcement across Admin, Reviewer, and Editor roles.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {availableUsers.map((user) => {
+                    const colors = getRoleBadgeColors(user.role);
+                    const isSelected = user.role === currentRole;
+                    return (
+                      <button
+                        key={user.role}
+                        onClick={() => {
+                          switchRole(user.role);
+                          setRoleMenuOpen(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px',
+                          padding: '10px',
+                          borderRadius: 'var(--radius-sm)',
+                          background: isSelected ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.01)',
+                          border: isSelected ? `1px solid ${colors.border}` : '1px solid var(--border-subtle)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          transition: 'all var(--transition-fast)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            background: colors.bg,
+                            border: `1px solid ${colors.border}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: colors.color,
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            flexShrink: 0,
+                            marginTop: '2px'
+                          }}
+                        >
+                          {user.avatarInitials}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {user.name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                padding: '1px 6px',
+                                borderRadius: 'var(--radius-full)',
+                                background: colors.bg,
+                                color: colors.color
+                              }}
+                            >
+                              {user.role}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+                            {user.title}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                            {user.description}
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <div style={{ marginTop: '4px' }}>
+                            <Check size={14} color="var(--accent-lime)" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                  Note: Role switching is simulated in local storage for hackathon demonstration.
+                </div>
+              </div>
+            )}
+          </div>
+
           <Button
             variant="primary"
             size="sm"

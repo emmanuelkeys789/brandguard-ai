@@ -16,7 +16,8 @@ import {
   Bot,
   RefreshCw,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Eye
 } from 'lucide-react';
 import type {
   ReviewItem,
@@ -38,6 +39,8 @@ import {
 } from '../../services/ruleEngine';
 import { aiToneService, applyTextReplacement } from '../../services/aiToneService';
 import { isSummaryText, deduplicateDecisionHistory } from '../../services/brandStorage';
+import { useAuth } from '../../context/useAuth';
+import { VisualFindingsCard } from '../review/VisualFindingsCard';
 
 interface ReviewDetailModalProps {
   review: ReviewItem;
@@ -56,11 +59,13 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
   onUpdateReview,
   showToast
 }) => {
+  const { currentUser, can } = useAuth();
+
   // Tabs: 'revision' (editable) vs 'original' (immutable)
   const [activeDraftTab, setActiveDraftTab] = useState<'revision' | 'original'>('revision');
 
-  // Segmented findings tab: 'policy' (deterministic) vs 'ai' (advisory)
-  const [activeResultsSection, setActiveResultsSection] = useState<'policy' | 'ai'>('policy');
+  // Segmented findings tab: 'policy' (deterministic) vs 'ai' (advisory) vs 'visual' (multimodal)
+  const [activeResultsSection, setActiveResultsSection] = useState<'policy' | 'ai' | 'visual'>('policy');
 
   // Working drafts - NEVER use summary text as draft content
   const originalDraftText =
@@ -342,6 +347,15 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
   const handleExecuteDecision = (targetStatus: ReviewStatus, actionName: 'Approve' | 'Request Changes' | 'Reject' | 'Save Draft') => {
     if (isSubmittingDecision) return;
 
+    // RBAC check: only Reviewer or Admin can approve, reject, or request changes
+    if (
+      (actionName === 'Approve' || actionName === 'Reject' || actionName === 'Request Changes') &&
+      !can('approve_review')
+    ) {
+      showToast('error', 'Permission Denied', 'Reviewer or Admin authorization is required to execute approval decisions.');
+      return;
+    }
+
     // Validate comment for Request Changes
     if (actionName === 'Request Changes' && !reviewerComment.trim()) {
       setCommentError('Please explain what needs to be corrected before requesting changes.');
@@ -371,7 +385,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
     const newDecisionRecord: ReviewDecisionRecord = {
       id: `dec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       action: actionName,
-      reviewerName: 'Workspace Reviewer',
+      reviewerName: currentUser.name,
       reviewerComment: reviewerComment.trim() || undefined,
       timestamp: now,
       previousStatus: review.status,
@@ -684,6 +698,97 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
             </div>
           </div>
 
+          {/* Creative Asset Attachment Card */}
+          {review.imageAsset && (
+            <div
+              className="glass-panel"
+              style={{
+                padding: '16px 20px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(56, 189, 248, 0.04)',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '14px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                {review.imageAsset.thumbnailDataUrl ? (
+                  <img
+                    src={review.imageAsset.thumbnailDataUrl}
+                    alt={review.imageAsset.altText || 'Attached creative asset'}
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '8px',
+                      objectFit: 'cover',
+                      border: '1px solid var(--border-medium)',
+                      background: '#0B0E14'
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <Eye size={22} color="var(--accent-lime)" />
+                  </div>
+                )}
+
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {review.imageAsset.fileName}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(56, 189, 248, 0.12)',
+                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                        color: '#38BDF8'
+                      }}
+                    >
+                      Attached Creative ({(review.imageAsset.fileSize / 1024).toFixed(0)} KB)
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    {review.imageAsset.altText ? (
+                      <span>
+                        <strong style={{ color: 'var(--text-tertiary)' }}>Alt Text:</strong> “{review.imageAsset.altText}”
+                      </span>
+                    ) : (
+                      <span style={{ color: '#FBBF24', fontStyle: 'italic' }}>
+                        No alt-text provided by author
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setActiveResultsSection('visual')}
+                iconLeft={<Eye size={13} />}
+              >
+                Inspect Visual Compliance ({(review.visualFindings || []).length})
+              </Button>
+            </div>
+          )}
+
           {/* Draft Comparison & Revision Section */}
           <div
             style={{
@@ -918,6 +1023,33 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 )
               </span>
             </button>
+
+            {review.imageAsset && (
+              <button
+                type="button"
+                id="modal-tab-visual-findings"
+                onClick={() => setActiveResultsSection('visual')}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-xs)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: activeResultsSection === 'visual' ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: activeResultsSection === 'visual' ? 'rgba(56, 189, 248, 0.35)' : 'transparent',
+                  color: activeResultsSection === 'visual' ? '#38BDF8' : 'var(--text-secondary)'
+                }}
+              >
+                <Eye size={14} />
+                <span>Visual Compliance ({(review.visualFindings || []).length})</span>
+              </button>
+            )}
           </div>
 
           {/* Section 1: Deterministic Policy Rule Findings */}
@@ -1523,6 +1655,19 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
             </div>
           )}
 
+          {/* Section 3: Multimodal Visual Compliance Findings */}
+          {activeResultsSection === 'visual' && review.imageAsset && (
+            <VisualFindingsCard
+              findings={review.visualFindings || []}
+              status={review.visualAnalysisStatus || 'completed'}
+              error={review.visualAnalysisError}
+              provider={review.visualProvider}
+              model={review.visualModel}
+              previewUrl={review.imageAsset.thumbnailDataUrl}
+              altText={review.imageAsset.altText}
+            />
+          )}
+
           {/* Decision Comments Input Box */}
           <div
             style={{
@@ -1644,42 +1789,61 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
               </Button>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Request Changes Button */}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handleExecuteDecision('Changes Requested', 'Request Changes')}
-                style={{ borderColor: 'rgba(251, 146, 60, 0.4)', color: '#FDBA74' }}
-                iconLeft={<RotateCcw size={14} />}
-                id="review-request-changes-btn"
-              >
-                Request Changes
-              </Button>
+            {can('approve_review') ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Request Changes Button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleExecuteDecision('Changes Requested', 'Request Changes')}
+                  style={{ borderColor: 'rgba(251, 146, 60, 0.4)', color: '#FDBA74' }}
+                  iconLeft={<RotateCcw size={14} />}
+                  id="review-request-changes-btn"
+                >
+                  Request Changes
+                </Button>
 
-              {/* Reject Button */}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setConfirmAction('Reject')}
-                style={{ borderColor: 'rgba(248, 113, 113, 0.4)', color: '#FCA5A5' }}
-                iconLeft={<X size={14} />}
-                id="review-reject-btn"
-              >
-                Reject
-              </Button>
+                {/* Reject Button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConfirmAction('Reject')}
+                  style={{ borderColor: 'rgba(248, 113, 113, 0.4)', color: '#FCA5A5' }}
+                  iconLeft={<X size={14} />}
+                  id="review-reject-btn"
+                >
+                  Reject
+                </Button>
 
-              {/* Approve Button */}
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setConfirmAction('Approve')}
-                iconLeft={<CheckCircle2 size={14} />}
-                id="review-approve-btn"
+                {/* Approve Button */}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setConfirmAction('Approve')}
+                  iconLeft={<CheckCircle2 size={14} />}
+                  id="review-approve-btn"
+                >
+                  Approve
+                </Button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(251, 191, 36, 0.08)',
+                  border: '1px solid rgba(251, 191, 36, 0.25)',
+                  color: '#FBBF24',
+                  fontSize: '12px'
+                }}
               >
-                Approve
-              </Button>
-            </div>
+                <Lock size={13} />
+                <span>Editor Role: Approval, rejection, and change requests require Reviewer or Admin authorization.</span>
+              </div>
+            )}
           </div>
 
           {/* Decision History & Audit Trail */}

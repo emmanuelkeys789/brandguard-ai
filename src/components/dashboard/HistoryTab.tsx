@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Download, Search, FileText, Plus, Trash2, ExternalLink } from 'lucide-react';
 import { useBrand } from '../../context/useBrand';
+import { useAuth } from '../../context/useAuth';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { ReviewDetailModal } from './ReviewDetailModal';
@@ -12,6 +13,7 @@ interface HistoryTabProps {
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({ onNavigateTab }) => {
   const { reviews, rules, brandProfile, saveReview, deleteReview, showToast } = useBrand();
+  const { can } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReview, setSelectedReview] = useState<ReviewItem | null>(null);
@@ -315,25 +317,27 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({ onNavigateTab }) => {
                           >
                             Review
                           </Button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteReview(item.id);
-                            }}
-                            title="Delete review"
-                            aria-label={`Delete review ${item.title}`}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--text-tertiary)',
-                              cursor: 'pointer',
-                              padding: '6px'
-                            }}
-                            className="history-delete-btn"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {can('delete_review') && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteReview(item.id);
+                              }}
+                              title="Delete review"
+                              aria-label={`Delete review ${item.title}`}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--text-tertiary)',
+                                cursor: 'pointer',
+                                padding: '6px'
+                              }}
+                              className="history-delete-btn"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

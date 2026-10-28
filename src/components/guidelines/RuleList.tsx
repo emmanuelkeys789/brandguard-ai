@@ -8,7 +8,8 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
-  Link2
+  Link2,
+  Lock
 } from 'lucide-react';
 import type { BrandRule } from '../../types';
 import { RULE_CATEGORIES } from '../../services/brandStorage';
@@ -20,6 +21,7 @@ interface RuleListProps {
   onEditRule: (rule: BrandRule) => void;
   onDeleteRule: (rule: BrandRule) => void;
   onToggleRule: (id: string) => void;
+  canManageRules?: boolean;
 }
 
 export const RuleList: React.FC<RuleListProps> = ({
@@ -27,7 +29,8 @@ export const RuleList: React.FC<RuleListProps> = ({
   onAddRule,
   onEditRule,
   onDeleteRule,
-  onToggleRule
+  onToggleRule,
+  canManageRules = true
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -275,9 +278,15 @@ export const RuleList: React.FC<RuleListProps> = ({
               </select>
             </div>
 
-            <Button variant="primary" size="sm" onClick={onAddRule} iconLeft={<Plus size={14} />}>
-              Add Rule
-            </Button>
+            {canManageRules ? (
+              <Button variant="primary" size="sm" onClick={onAddRule} iconLeft={<Plus size={14} />}>
+                Add Rule
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" disabled iconLeft={<Lock size={14} />} title="Admin role required to create brand rules">
+                Add Rule (Admin Only)
+              </Button>
+            )}
           </div>
         </div>
 
@@ -385,9 +394,15 @@ export const RuleList: React.FC<RuleListProps> = ({
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
               {rules.length === 0 ? (
-                <Button variant="primary" size="sm" onClick={onAddRule} iconLeft={<Plus size={14} />} id="rulelist-add-first-rule-btn">
-                  Add Your First Rule
-                </Button>
+                canManageRules ? (
+                  <Button variant="primary" size="sm" onClick={onAddRule} iconLeft={<Plus size={14} />} id="rulelist-add-first-rule-btn">
+                    Add Your First Rule
+                  </Button>
+                ) : (
+                  <Button variant="secondary" size="sm" disabled iconLeft={<Lock size={14} />} id="rulelist-add-first-rule-btn" title="Admin role required to configure brand rules">
+                    Add Your First Rule (Admin Only)
+                  </Button>
+                )
               ) : (
                 <Button
                   variant="secondary"
@@ -462,8 +477,9 @@ export const RuleList: React.FC<RuleListProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'center' }}>
                       <button
                         type="button"
-                        onClick={() => onToggleRule(rule.id)}
-                        title={isRuleActive ? 'Rule is active for audits (click to pause)' : 'Rule is paused (click to activate)'}
+                        disabled={!canManageRules}
+                        onClick={() => canManageRules && onToggleRule(rule.id)}
+                        title={!canManageRules ? 'Admin role required to activate or pause brand rules' : (isRuleActive ? 'Rule is active for audits (click to pause)' : 'Rule is paused (click to activate)')}
                         aria-label={isRuleActive ? 'Pause rule' : 'Activate rule'}
                         style={{
                           width: '32px',
@@ -471,7 +487,8 @@ export const RuleList: React.FC<RuleListProps> = ({
                           borderRadius: '18px',
                           background: isRuleActive ? 'var(--accent-lime)' : 'rgba(255, 255, 255, 0.15)',
                           border: 'none',
-                          cursor: 'pointer',
+                          cursor: canManageRules ? 'pointer' : 'not-allowed',
+                          opacity: canManageRules ? 1 : 0.5,
                           position: 'relative',
                           transition: 'background var(--transition-fast)'
                         }}
@@ -616,47 +633,51 @@ export const RuleList: React.FC<RuleListProps> = ({
                         {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                       </button>
 
-                      <button
-                        onClick={() => onEditRule(rule)}
-                        title="Edit rule"
-                        aria-label="Edit rule"
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '4px',
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--text-secondary)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer'
-                        }}
-                        className="rule-action-btn"
-                      >
-                        <Edit2 size={14} />
-                      </button>
+                      {canManageRules && (
+                        <>
+                          <button
+                            onClick={() => onEditRule(rule)}
+                            title="Edit rule"
+                            aria-label="Edit rule"
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '4px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-secondary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            className="rule-action-btn"
+                          >
+                            <Edit2 size={14} />
+                          </button>
 
-                      <button
-                        onClick={() => onDeleteRule(rule)}
-                        title="Delete rule"
-                        aria-label="Delete rule"
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '4px',
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--text-tertiary)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer'
-                        }}
-                        className="rule-delete-btn"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                          <button
+                            onClick={() => onDeleteRule(rule)}
+                            title="Delete rule"
+                            aria-label="Delete rule"
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '4px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-tertiary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            className="rule-delete-btn"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 

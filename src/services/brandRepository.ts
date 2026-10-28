@@ -127,7 +127,13 @@ export function rowToReview(row: any): ReviewItem {
     reviewedBy: row.reviewed_by || undefined,
     aiSuggestions: Array.isArray(row.ai_suggestions) ? row.ai_suggestions : undefined,
     aiAnalysisStatus: row.ai_analysis_status || undefined,
-    aiAnalysisError: row.ai_analysis_error || undefined
+    aiAnalysisError: row.ai_analysis_error || undefined,
+    imageAsset: row.image_asset || undefined,
+    visualFindings: Array.isArray(row.visual_findings) ? row.visual_findings : undefined,
+    visualAnalysisStatus: row.visual_analysis_status || undefined,
+    visualAnalysisError: row.visual_analysis_error || undefined,
+    visualProvider: row.visual_provider || undefined,
+    visualModel: row.visual_model || undefined
   };
 }
 
@@ -159,6 +165,12 @@ export function reviewToRow(review: ReviewItem): Record<string, any> {
     ai_suggestions: Array.isArray(review.aiSuggestions) ? review.aiSuggestions : [],
     ai_analysis_status: review.aiAnalysisStatus || null,
     ai_analysis_error: review.aiAnalysisError || null,
+    image_asset: review.imageAsset || null,
+    visual_findings: Array.isArray(review.visualFindings) ? review.visualFindings : [],
+    visual_analysis_status: review.visualAnalysisStatus || null,
+    visual_analysis_error: review.visualAnalysisError || null,
+    visual_provider: review.visualProvider || null,
+    visual_model: review.visualModel || null,
     updated_at: new Date().toISOString()
   };
 }

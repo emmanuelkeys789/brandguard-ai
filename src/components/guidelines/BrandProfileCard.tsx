@@ -6,7 +6,8 @@ import {
   Globe,
   FileText,
   Edit3,
-  Plus
+  Plus,
+  Lock
 } from 'lucide-react';
 import type { BrandProfile } from '../../types';
 import { Button } from '../ui/Button';
@@ -15,12 +16,14 @@ interface BrandProfileCardProps {
   profile: BrandProfile | null;
   onEdit: () => void;
   onCreate: () => void;
+  canManageProfile?: boolean;
 }
 
 export const BrandProfileCard: React.FC<BrandProfileCardProps> = ({
   profile,
   onEdit,
-  onCreate
+  onCreate,
+  canManageProfile = true
 }) => {
   if (!profile) {
     return (
@@ -63,9 +66,15 @@ export const BrandProfileCard: React.FC<BrandProfileCardProps> = ({
           Establish your brand identity, target demographic, and communication tone. These parameters anchor all automated pre-publication audits across your workspace.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <Button variant="primary" size="sm" onClick={onCreate} iconLeft={<Plus size={15} />}>
-            Create Brand Profile
-          </Button>
+          {canManageProfile ? (
+            <Button variant="primary" size="sm" onClick={onCreate} iconLeft={<Plus size={15} />}>
+              Create Brand Profile
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" disabled iconLeft={<Lock size={14} />} title="Admin role required to configure brand profiles">
+              Create Brand Profile (Admin Only)
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -143,9 +152,15 @@ export const BrandProfileCard: React.FC<BrandProfileCardProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Button variant="secondary" size="sm" onClick={onEdit} iconLeft={<Edit3 size={14} />}>
-            Edit Profile
-          </Button>
+          {canManageProfile ? (
+            <Button variant="secondary" size="sm" onClick={onEdit} iconLeft={<Edit3 size={14} />}>
+              Edit Profile
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" disabled iconLeft={<Lock size={14} />} title="Admin role required to modify brand profiles">
+              Edit Profile (Admin Only)
+            </Button>
+          )}
         </div>
       </div>
 

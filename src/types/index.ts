@@ -138,6 +138,48 @@ export interface ReviewItem {
   aiSuggestions?: AiToneSuggestion[];
   aiAnalysisStatus?: AiAnalysisStatus;
   aiAnalysisError?: string;
+  imageAsset?: ImageAsset;
+  visualFindings?: VisualAnalysisFinding[];
+  visualAnalysisStatus?: VisualAnalysisStatus;
+  visualAnalysisError?: string;
+  visualProvider?: string;
+  visualModel?: string;
+}
+
+export type VisualCategory =
+  | 'Logo & Visual Identity'
+  | 'Colors & Typography'
+  | 'Composition & Layout'
+  | 'Accessibility & Contrast'
+  | 'Alt Text Assessment';
+
+export type VisualAnalysisStatus = 'idle' | 'analyzing' | 'completed' | 'unavailable' | 'error';
+
+export interface ImageAsset {
+  id: string;
+  fileName: string;
+  fileType: 'image/png' | 'image/jpeg' | 'image/webp' | string;
+  fileSize: number;
+  altText?: string;
+  thumbnailDataUrl?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface VisualAnalysisFinding {
+  id: string;
+  category: VisualCategory;
+  severity: SeverityLevel;
+  title: string;
+  description: string;
+  observableEvidence: string;
+  isUncertain: boolean;
+  confidence: 'High' | 'Medium' | 'Tentative' | 'Uncertain';
+  suggestedRemedy?: string;
+  relatedRuleId?: string;
+  relatedRuleTitle?: string;
+  hasVerifiedPolicyEvidence: boolean;
+  citationLabel: string;
 }
 
 export interface BrandRule {
@@ -200,3 +242,6 @@ export type DashboardTab =
   | 'history' 
   | 'insights' 
   | 'settings';
+
+export type { UserRole, WorkspaceAction, SimulatedUser } from '../services/rbac.ts';
+

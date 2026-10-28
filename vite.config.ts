@@ -34,6 +34,33 @@ export default defineConfig({
             }
           });
         });
+
+        server.middlewares.use('/api/multimodal-review', async (req, res) => {
+          if (req.method !== 'POST') {
+            res.statusCode = 405;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }));
+            return;
+          }
+          let raw = '';
+          req.on('data', (chunk) => {
+            raw += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(raw || '{}');
+              const { handleMultimodalReview } = await import('./src/services/multimodalServerHandler.ts');
+              const result = await handleMultimodalReview(body);
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = 200;
+              res.end(JSON.stringify(result));
+            } catch (err: any) {
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = 500;
+              res.end(JSON.stringify({ status: 'error', error: err?.message || 'Server error', visualFindings: [] }));
+            }
+          });
+        });
       }
     }
   ],

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { LandingPage } from './pages/LandingPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { BrandProvider } from './context/BrandContext';
+import { AuthProvider } from './context/AuthContext';
 import type { DashboardTab } from './types';
 
 export const App: React.FC = () => {
@@ -99,21 +100,23 @@ export const App: React.FC = () => {
   const isAppRoute = currentPath === '/app' || currentPath.startsWith('/app');
 
   return (
-    <BrandProvider>
-      {isAppRoute ? (
-        <WorkspacePage
-          currentTab={activeWorkspaceTab}
-          onSelectTab={handleTabChangeInWorkspace}
-          onReturnToLanding={() => navigateTo('/')}
-        />
-      ) : (
-        <LandingPage
-          onNavigateToApp={(initialTab) =>
-            navigateTo('/app', (initialTab as DashboardTab) || 'overview')
-          }
-        />
-      )}
-    </BrandProvider>
+    <AuthProvider>
+      <BrandProvider>
+        {isAppRoute ? (
+          <WorkspacePage
+            currentTab={activeWorkspaceTab}
+            onSelectTab={handleTabChangeInWorkspace}
+            onReturnToLanding={() => navigateTo('/')}
+          />
+        ) : (
+          <LandingPage
+            onNavigateToApp={(initialTab) =>
+              navigateTo('/app', (initialTab as DashboardTab) || 'overview')
+            }
+          />
+        )}
+      </BrandProvider>
+    </AuthProvider>
   );
 };
 

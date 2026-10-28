@@ -7,9 +7,13 @@ import {
   type SyncResult
 } from '../services/brandRepository';
 import { BrandContext, type ToastMessage } from './brandContextDef';
+import { useAuth } from './useAuth';
 
 export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { currentUser, can } = useAuth();
+
   // Read stored data directly on startup without auto-inserting fake seeds
+
   const [brandProfile, setBrandProfile] = useState<BrandProfile | null>(() => {
     return brandStorage.getStoredProfile();
   });
@@ -154,6 +158,11 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const saveProfile = useCallback(
     (data: Omit<BrandProfile, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): boolean => {
+      if (!can('manage_profile')) {
+        showToast('error', 'Permission Denied', 'Only workspace Admins can modify the brand profile.');
+        return false;
+      }
+
       const result = brandStorage.saveProfile(data);
       if (result.success && result.data) {
         setBrandProfile(result.data);
@@ -173,10 +182,15 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return false;
       }
     },
-    [showToast]
+    [can, showToast]
   );
 
   const deleteProfile = useCallback((): boolean => {
+    if (!can('manage_profile')) {
+      showToast('error', 'Permission Denied', 'Only workspace Admins can remove the brand profile.');
+      return false;
+    }
+
     const result = brandStorage.deleteProfile();
     if (result.success) {
       setBrandProfile(null);
@@ -194,10 +208,15 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       showToast('error', 'Failed to Remove Profile', result.error || 'Could not delete profile from storage.');
       return false;
     }
-  }, [showToast]);
+  }, [can, showToast]);
 
   const saveRule = useCallback(
     (data: Omit<BrandRule, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): boolean => {
+      if (!can('manage_rules')) {
+        showToast('error', 'Permission Denied', 'Only workspace Admins can create or edit brand rules.');
+        return false;
+      }
+
       const currentRules = brandStorage.getStoredRules();
       const isEdit = Boolean(data.id && currentRules.some((r) => r.id === data.id));
       const result = brandStorage.saveRule(data);
@@ -223,11 +242,16 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return false;
       }
     },
-    [showToast]
+    [can, showToast]
   );
 
   const deleteRule = useCallback(
     (id: string): boolean => {
+      if (!can('manage_rules')) {
+        showToast('error', 'Permission Denied', 'Only workspace Admins can delete brand rules.');
+        return false;
+      }
+
       const currentRules = brandStorage.getStoredRules();
       const targetRule = currentRules.find((r) => r.id === id);
       const result = brandStorage.deleteRule(id);
@@ -249,11 +273,16 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return false;
       }
     },
-    [showToast]
+    [can, showToast]
   );
 
   const toggleRuleEnabled = useCallback(
     (id: string): boolean => {
+      if (!can('manage_rules')) {
+        showToast('error', 'Permission Denied', 'Only workspace Admins can pause or activate brand rules.');
+        return false;
+      }
+
       const result = brandStorage.toggleRuleEnabled(id);
       if (result.success && result.data) {
         setRules(brandStorage.getStoredRules());
@@ -276,18 +305,30 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return false;
       }
     },
-    [showToast]
+    [can, showToast]
   );
 
   const saveReview = useCallback(
     (data: Omit<ReviewItem, 'id' | 'updatedAt'> & { id?: string; updatedAt?: string }): boolean => {
-      const result = brandStorage.saveReview(data);
+      const isApprovalOrRejection = data.status === 'Approved' || data.status === 'Rejected';
+      if (isApprovalOrRejection && !can('approve_review')) {
+        showToast('error', 'Permission Denied', 'Reviewer or Admin authorization is required to approve or reject reviews.');
+        return false;
+      }
+
+      const reviewAuthor = data.author && data.author !== 'Workspace Reviewer' ? data.author : currentUser.name;
+      const reviewToSave = {
+        ...data,
+        author: reviewAuthor
+      };
+
+      const result = brandStorage.saveReview(reviewToSave);
       if (result.success && result.data) {
         setReviews(brandStorage.getStoredReviews());
         showToast('success', 'Review Saved', `Saved review for "${result.data.title}".`);
 
         if (brandRepository.isCloudConfigured()) {
-          brandRepository.saveReview(data).then((cloudRes) => {
+          brandRepository.saveReview(reviewToSave).then((cloudRes) => {
             if (!cloudRes.success) {
               showToast('error', 'Cloud Save Warning', cloudRes.error || 'Failed to sync review to Cloud Database.');
             }
@@ -299,11 +340,16 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return false;
       }
     },
-    [showToast]
+    [can, currentUser.name, showToast]
   );
 
   const deleteReview = useCallback(
     (id: string): boolean => {
+      if (!can('delete_review')) {
+        showToast('error', 'Permission Denied', 'Only workspace Admins can delete review records.');
+        return false;
+      }
+
       const result = brandStorage.deleteReview(id);
       if (result.success) {
         setReviews(brandStorage.getStoredReviews());
@@ -322,8 +368,9 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return false;
       }
     },
-    [showToast]
+    [can, showToast]
   );
+
 
   const markReviewedContent = useCallback(() => {
     brandStorage.saveOnboardingState({ hasReviewed: true });

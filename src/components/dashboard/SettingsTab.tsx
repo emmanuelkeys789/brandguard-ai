@@ -6,10 +6,16 @@ import {
   RefreshCw,
   UploadCloud,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Shield,
+  User,
+  Lock,
+  XCircle
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useBrand } from '../../context/useBrand';
+import { useAuth } from '../../context/useAuth';
+import { SIMULATED_USERS, getRoleBadgeColors, type UserRole } from '../../services/rbac';
 
 export const SettingsTab: React.FC = () => {
   const {
@@ -18,6 +24,8 @@ export const SettingsTab: React.FC = () => {
     syncToDatabase,
     refreshFromDatabase
   } = useBrand();
+
+  const { currentRole, currentUser, switchRole, can } = useAuth();
 
   const [sensitivity, setSensitivity] = useState<'strict' | 'balanced' | 'advisory'>('balanced');
   const [autoFlagSuperlatives, setAutoFlagSuperlatives] = useState(true);
@@ -44,6 +52,182 @@ export const SettingsTab: React.FC = () => {
         <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>
           Manage workspace preferences, storage backend, and governance guardrails.
         </p>
+      </div>
+
+      {/* Role-Based Access Control Demo Panel */}
+      <div className="glass-panel" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: getRoleBadgeColors(currentRole).bg,
+                border: `1px solid ${getRoleBadgeColors(currentRole).border}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Shield size={18} color={getRoleBadgeColors(currentRole).color} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  Role-Based Access Control
+                </h2>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    background: getRoleBadgeColors(currentRole).bg,
+                    border: `1px solid ${getRoleBadgeColors(currentRole).border}`,
+                    color: getRoleBadgeColors(currentRole).color
+                  }}
+                >
+                  SIMULATED DEMO ROLE
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                Simulated multi-role workspace workflow. Switch active role to test permission enforcement.
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Role Switcher Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {(['Admin', 'Reviewer', 'Editor'] as UserRole[]).map((role) => {
+              const user = SIMULATED_USERS[role];
+              const isSelected = currentRole === role;
+              const colors = getRoleBadgeColors(role);
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => switchRole(role)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 'var(--radius-xs)',
+                    background: isSelected ? colors.bg : 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid',
+                    borderColor: isSelected ? colors.border : 'var(--border-subtle)',
+                    color: isSelected ? colors.color : 'var(--text-secondary)',
+                    fontSize: '12px',
+                    fontWeight: isSelected ? 600 : 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      borderRadius: '50%',
+                      background: colors.bg,
+                      color: colors.color,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '9px',
+                      fontWeight: 700
+                    }}
+                  >
+                    {user.avatarInitials}
+                  </span>
+                  <span>{role}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Current Active Persona Card */}
+        <div
+          style={{
+            padding: '14px 16px',
+            borderRadius: 'var(--radius-sm)',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid var(--border-subtle)',
+            marginBottom: '16px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <User size={15} color="var(--accent-lime)" />
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {currentUser.name}
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                ({currentUser.title})
+              </span>
+            </div>
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              {currentUser.email}
+            </span>
+          </div>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+            {currentUser.description}
+          </p>
+        </div>
+
+        {/* Permissions Matrix for Active Role */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Permissions Granted to Current Role ({currentRole}):
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '8px'
+            }}
+          >
+            {[
+              { label: 'Manage Brand Rules & Citations', permitted: can('manage_rules'), roleReq: 'Admin only' },
+              { label: 'Configure Brand Governance Profile', permitted: can('manage_profile'), roleReq: 'Admin only' },
+              { label: 'Approve & Reject Content Reviews', permitted: can('approve_review'), roleReq: 'Admin & Reviewer' },
+              { label: 'Request Changes on Reviews', permitted: can('request_changes'), roleReq: 'Admin & Reviewer' },
+              { label: 'Author Content & Apply AI Rewrites', permitted: can('create_draft'), roleReq: 'All roles' },
+              { label: 'Delete Past Workspace Reviews', permitted: can('delete_review'), roleReq: 'Admin only' }
+            ].map((perm) => (
+              <div
+                key={perm.label}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-xs)',
+                  background: perm.permitted ? 'rgba(52, 211, 153, 0.05)' : 'rgba(239, 68, 68, 0.05)',
+                  border: '1px solid',
+                  borderColor: perm.permitted ? 'rgba(52, 211, 153, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  fontSize: '12px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {perm.permitted ? (
+                    <CheckCircle2 size={14} color="#34D399" />
+                  ) : (
+                    <XCircle size={14} color="#F87171" />
+                  )}
+                  <span style={{ color: perm.permitted ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                    {perm.label}
+                  </span>
+                </div>
+                <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                  {perm.roleReq}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Cloud Database & Persistence Backend Panel */}
@@ -293,9 +477,15 @@ export const SettingsTab: React.FC = () => {
 
         {/* Action Button & Confirmation */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <Button variant="primary" size="md" type="submit" iconLeft={<Save size={16} />}>
-            Save Workspace Preferences
-          </Button>
+          {can('manage_profile') ? (
+            <Button variant="primary" size="md" type="submit" iconLeft={<Save size={16} />}>
+              Save Workspace Preferences
+            </Button>
+          ) : (
+            <Button variant="secondary" size="md" disabled iconLeft={<Lock size={16} />} title="Admin role required to modify workspace preferences">
+              Save Workspace Preferences (Admin Only)
+            </Button>
+          )}
 
           {savedSuccess && (
             <span
