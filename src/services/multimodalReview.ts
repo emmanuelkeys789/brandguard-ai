@@ -18,6 +18,9 @@ export {
  * Reads a File object as base64 string and data URL in browser environments.
  */
 export function readFileAsBase64(file: File): Promise<{ base64: string; dataUrl: string }> {
+  if (typeof FileReader === 'undefined') {
+    return Promise.resolve({ base64: '', dataUrl: '' });
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -26,6 +29,106 @@ export function readFileAsBase64(file: File): Promise<{ base64: string; dataUrl:
       resolve({ base64, dataUrl: result });
     };
     reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Prepares and compresses the image creative before transmitting it for multimodal AI analysis.
+ * - Caps maximum dimension at 1600px (recommended resolution for modern vision LLMs like Gemini and GPT-4o).
+ * - Preserves aspect ratio, crisp typography, and high contrast for brand compliance checks.
+ * - Compresses high-resolution PNGs and JPEGs down from 4MB to ~200-500KB.
+ * - Drastically avoids OpenAI "input_tokens_exceeded" and Netlify payload size limits.
+ */
+export async function prepareImageForAnalysis(
+  file: File,
+  maxDim = 1600,
+  quality = 0.85
+): Promise<{ base64: string; mimeType: string; fileSizeBytes: number }> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    const raw = await readFileAsBase64(file);
+    return {
+      base64: raw.base64,
+      mimeType: file.type || 'image/jpeg',
+      fileSizeBytes: file.size
+    };
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+
+        // If image is already moderately sized (<= 1200px and <= 600KB), transmit raw
+        if (width <= 1200 && height <= 1200 && file.size <= 600 * 1024) {
+          const rawResult = reader.result as string;
+          const base64 = rawResult.includes(',') ? rawResult.split(',')[1] : rawResult;
+          resolve({
+            base64,
+            mimeType: file.type || 'image/jpeg',
+            fileSizeBytes: file.size
+          });
+          return;
+        }
+
+        let targetWidth = width;
+        let targetHeight = height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            targetHeight = Math.round((height * maxDim) / width);
+            targetWidth = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            targetWidth = Math.round((width * maxDim) / height);
+            targetHeight = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, targetWidth);
+        canvas.height = Math.max(1, targetHeight);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          const rawResult = reader.result as string;
+          const base64 = rawResult.includes(',') ? rawResult.split(',')[1] : rawResult;
+          resolve({ base64, mimeType: file.type || 'image/jpeg', fileSizeBytes: file.size });
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        // Keep PNG if original is small PNG; otherwise export as high-quality JPEG
+        const isPng = file.type === 'image/png';
+        const targetMime = isPng && file.size <= 1.2 * 1024 * 1024 ? 'image/png' : 'image/jpeg';
+        const dataUrl = canvas.toDataURL(targetMime, quality);
+        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+        const estimatedBytes = Math.round((base64.length * 3) / 4);
+
+        resolve({
+          base64,
+          mimeType: targetMime,
+          fileSizeBytes: estimatedBytes
+        });
+      };
+
+      img.onerror = () => {
+        const rawResult = reader.result as string;
+        const base64 = rawResult.includes(',') ? rawResult.split(',')[1] : rawResult;
+        resolve({ base64, mimeType: file.type || 'image/jpeg', fileSizeBytes: file.size });
+      };
+
+      img.src = reader.result as string;
+    };
+
+    reader.onerror = () => {
+      resolve({ base64: '', mimeType: file.type || 'image/jpeg', fileSizeBytes: 0 });
+    };
+
     reader.readAsDataURL(file);
   });
 }

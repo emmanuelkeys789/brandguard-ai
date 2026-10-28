@@ -31,8 +31,8 @@ import { ImageUploadZone } from '../review/ImageUploadZone';
 import { VisualFindingsCard } from '../review/VisualFindingsCard';
 import {
   multimodalService,
-  readFileAsBase64,
-  generateThumbnail
+  generateThumbnail,
+  prepareImageForAnalysis
 } from '../../services/multimodalReview';
 import type {
   DashboardTab,
@@ -134,13 +134,13 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setVisualStatus('analyzing');
     setVisualError(null);
 
-    readFileAsBase64(selectedImageFile)
-      .then(async ({ base64 }) => {
+    prepareImageForAnalysis(selectedImageFile)
+      .then(async ({ base64, mimeType, fileSizeBytes }) => {
         const visRes = await multimodalService.requestVisualReview({
           imageBase64: base64,
-          mimeType: selectedImageFile.type,
+          mimeType,
           fileName: selectedImageFile.name,
-          fileSizeBytes: selectedImageFile.size,
+          fileSizeBytes,
           altText: imageAltText,
           brandProfile,
           brandRules: enabledRules,
@@ -290,13 +290,13 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
       setVisualError(null);
       setVisualFindings([]);
 
-      readFileAsBase64(selectedImageFile)
-        .then(async ({ base64 }) => {
+      prepareImageForAnalysis(selectedImageFile)
+        .then(async ({ base64, mimeType, fileSizeBytes }) => {
           const visRes = await multimodalService.requestVisualReview({
             imageBase64: base64,
-            mimeType: selectedImageFile.type,
+            mimeType,
             fileName: selectedImageFile.name,
-            fileSizeBytes: selectedImageFile.size,
+            fileSizeBytes,
             altText: imageAltText,
             brandProfile,
             brandRules: enabledRules,

@@ -2,7 +2,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateImageFile,
-  evaluateAuthorAltText
+  evaluateAuthorAltText,
+  prepareImageForAnalysis
 } from './multimodalReview.ts';
 import {
   handleMultimodalReview,
@@ -300,6 +301,299 @@ describe('Multimodal Brand Compliance & Accessibility Tests', () => {
       assert.ok(result.findings.length > 0);
       assert.ok(result.score < 100);
       assert.equal(result.checkedRulesCount, 1);
+    });
+  });
+
+  describe('Provider Selection Priority & Error Handling Tests', () => {
+    const validBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    test('15. Prefers Gemini when GEMINI_API_KEY is available even if OPENAI_API_KEY is set', async () => {
+      const originalFetch = globalThis.fetch;
+      let requestedUrl = '';
+      let requestedHeaders: Record<string, string> = {};
+
+      globalThis.fetch = async (url: any, opts: any) => {
+        requestedUrl = String(url);
+        requestedHeaders = opts?.headers || {};
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        visualFindings: [
+                          {
+                            id: 'vis_gemini_1',
+                            category: 'Logo & Visual Identity',
+                            severity: 'Low',
+                            title: 'Gemini Verified Asset',
+                            description: 'Gemini successfully analyzed the visual creative.',
+                            observableEvidence: 'Direct logo inspection.',
+                            isUncertain: false,
+                            confidence: 'High'
+                          }
+                        ]
+                      })
+                    }
+                  ]
+                }
+              }
+            ]
+          })
+        } as any;
+      };
+
+      try {
+        const res = await handleMultimodalReview(
+          {
+            imageBase64: validBase64,
+            mimeType: 'image/png',
+            fileName: 'creative.png',
+            fileSizeBytes: 1024,
+            altText: 'Brand logo emblem centered with lime badge',
+            brandProfile: sampleProfile,
+            brandRules: [sampleVisualRule]
+          },
+          {
+            geminiApiKey: 'mock-gemini-key-12345',
+            openaiApiKey: 'mock-openai-key-67890'
+          }
+        );
+
+        assert.equal(res.status, 'completed');
+        assert.equal(res.provider, 'gemini');
+        assert.ok(requestedUrl.includes('generativelanguage.googleapis.com'));
+        assert.equal(requestedHeaders['x-goog-api-key'], 'mock-gemini-key-12345');
+        // Critical security assertion: API key is NOT exposed in the query string
+        assert.ok(!requestedUrl.includes('mock-gemini-key-12345'));
+        assert.equal(res.visualFindings.length, 1);
+        assert.equal(res.visualFindings[0].title, 'Gemini Verified Asset');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('16. Uses OpenAI when only OPENAI_API_KEY is configured', async () => {
+      const originalFetch = globalThis.fetch;
+      let requestedUrl = '';
+
+      globalThis.fetch = async (url: any) => {
+        requestedUrl = String(url);
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    visualFindings: [
+                      {
+                        id: 'vis_openai_1',
+                        category: 'Colors & Typography',
+                        severity: 'Medium',
+                        title: 'OpenAI Verified Palette',
+                        description: 'OpenAI successfully inspected colors.',
+                        observableEvidence: 'Dominant colors match palette.',
+                        isUncertain: false,
+                        confidence: 'High'
+                      }
+                    ]
+                  })
+                }
+              }
+            ]
+          })
+        } as any;
+      };
+
+      try {
+        const res = await handleMultimodalReview(
+          {
+            imageBase64: validBase64,
+            mimeType: 'image/png',
+            fileName: 'creative.png',
+            fileSizeBytes: 1024,
+            altText: 'Brand logo emblem centered with lime badge',
+            brandProfile: sampleProfile,
+            brandRules: [sampleVisualRule]
+          },
+          {
+            geminiApiKey: '',
+            openaiApiKey: 'mock-openai-key-67890'
+          }
+        );
+
+        assert.equal(res.status, 'completed');
+        assert.equal(res.provider, 'openai');
+        assert.ok(requestedUrl.includes('api.openai.com'));
+        assert.equal(res.visualFindings.length, 1);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('17. Handles OpenAI input_tokens_exceeded error gracefully without false completion', async () => {
+      const originalFetch = globalThis.fetch;
+
+      globalThis.fetch = async () => {
+        return {
+          ok: false,
+          status: 400,
+          text: async () => JSON.stringify({
+            error: {
+              message: 'Request size exceeds the allowed limit for your account tier.',
+              type: 'invalid_request_error',
+              code: 'input_tokens_exceeded'
+            }
+          })
+        } as any;
+      };
+
+      try {
+        const res = await handleMultimodalReview(
+          {
+            imageBase64: validBase64,
+            mimeType: 'image/png',
+            fileName: 'large-photo.png',
+            fileSizeBytes: 3 * 1024 * 1024,
+            altText: '', // Omitted alt text
+            brandProfile: sampleProfile,
+            brandRules: [sampleVisualRule]
+          },
+          {
+            geminiApiKey: '',
+            openaiApiKey: 'mock-openai-key-tier1'
+          }
+        );
+
+        // MUST be error, NEVER completed
+        assert.equal(res.status, 'error');
+        assert.equal(res.provider, 'openai');
+        assert.ok(res.error?.includes('exceeded token limits for the configured account tier'));
+        assert.ok(res.error?.includes('GEMINI_API_KEY'));
+        // Alt-text finding is preserved so author knows alt-text was missing
+        assert.equal(res.visualFindings.length, 1);
+        assert.ok(res.visualFindings[0].description.includes('No alt-text provided by author'));
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test('18. Falls back from OpenAI to Gemini when OpenAI token limit is hit', async () => {
+      const originalFetch = globalThis.fetch;
+      const providersAttempted: string[] = [];
+
+      globalThis.fetch = async (url: any) => {
+        const urlStr = String(url);
+        if (urlStr.includes('openai.com')) {
+          providersAttempted.push('openai');
+          return {
+            ok: false,
+            status: 400,
+            text: async () => '{"error": {"code": "input_tokens_exceeded", "message": "Request size exceeds limit"}}'
+          } as any;
+        }
+
+        if (urlStr.includes('generativelanguage.googleapis.com')) {
+          providersAttempted.push('gemini');
+          return {
+            ok: true,
+            json: async () => ({
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        text: JSON.stringify({
+                          visualFindings: [
+                            {
+                              id: 'vis_gemini_fallback',
+                              category: 'Accessibility & Contrast',
+                              severity: 'Low',
+                              title: 'Gemini Rescued Analysis',
+                              description: 'Gemini successfully completed review after OpenAI token exhaustion.',
+                              observableEvidence: 'Sufficient contrast verified.',
+                              isUncertain: false,
+                              confidence: 'High'
+                            }
+                          ]
+                        })
+                      }
+                    ]
+                  }
+                }
+              ]
+            })
+          } as any;
+        }
+
+        return { ok: false, status: 500, text: async () => 'Unknown' } as any;
+      };
+
+      const prevEnv = process.env.MULTIMODAL_PROVIDER;
+      process.env.MULTIMODAL_PROVIDER = 'openai';
+
+      try {
+        const res = await handleMultimodalReview(
+          {
+            imageBase64: validBase64,
+            mimeType: 'image/png',
+            fileName: 'hero.png',
+            fileSizeBytes: 2 * 1024 * 1024,
+            altText: 'Brand hero creative banner',
+            brandProfile: sampleProfile,
+            brandRules: [sampleVisualRule]
+          },
+          {
+            geminiApiKey: 'mock-gemini-key',
+            openaiApiKey: 'mock-openai-key'
+          }
+        );
+
+        assert.equal(res.status, 'completed');
+        assert.equal(res.provider, 'gemini');
+        assert.deepEqual(providersAttempted, ['openai', 'gemini']);
+        assert.equal(res.visualFindings.length, 1);
+        assert.equal(res.visualFindings[0].title, 'Gemini Rescued Analysis');
+      } finally {
+        globalThis.fetch = originalFetch;
+        process.env.MULTIMODAL_PROVIDER = prevEnv;
+      }
+    });
+
+    test('19. Server rejects oversized raw base64 payload strings (> 6 MB)', async () => {
+      // 6.5 MB string
+      const oversizedPayload = 'A'.repeat(6.5 * 1024 * 1024);
+      const res = await handleMultimodalReview(
+        {
+          imageBase64: oversizedPayload,
+          mimeType: 'image/png',
+          fileName: 'oversized.png',
+          fileSizeBytes: 3 * 1024 * 1024,
+          brandProfile: sampleProfile
+        },
+        {
+          geminiApiKey: 'mock-key'
+        }
+      );
+
+      assert.equal(res.status, 'error');
+      assert.ok(res.error?.includes('Server rejected oversized creative payload'));
+    });
+
+    test('20. prepareImageForAnalysis falls back gracefully in non-browser Node runtime', async () => {
+      const mockFile = {
+        name: 'test.jpg',
+        type: 'image/jpeg',
+        size: 5000
+      } as any;
+
+      const res = await prepareImageForAnalysis(mockFile);
+      assert.ok(typeof res.base64 === 'string');
+      assert.equal(res.mimeType, 'image/jpeg');
     });
   });
 });
