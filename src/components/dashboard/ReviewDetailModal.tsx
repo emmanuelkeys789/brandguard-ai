@@ -381,6 +381,11 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
     // Validate comment for Request Changes
     if (actionName === 'Request Changes' && !reviewerComment.trim()) {
       setCommentError('Please explain what needs to be corrected before requesting changes.');
+      const commentInput = document.getElementById('review-decision-comment-input');
+      if (commentInput) {
+        commentInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        commentInput.focus();
+      }
       return;
     }
 
@@ -601,49 +606,54 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
 
   return (
     <div
+      className="review-modal-backdrop"
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(5, 7, 12, 0.82)',
+        background: 'rgba(5, 7, 12, 0.85)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 100,
-        padding: '20px'
+        padding: 'clamp(10px, 2.5vw, 24px)',
+        overflow: 'hidden'
       }}
       onClick={onClose}
     >
       <div
-        className="glass-panel"
+        className="glass-panel review-modal-dialog"
         style={{
-          maxWidth: '920px',
+          maxWidth: '1040px',
           width: '100%',
-          maxHeight: '90vh',
+          maxHeight: 'min(90vh, 90dvh)',
           display: 'flex',
           flexDirection: 'column',
           background: 'rgba(13, 16, 23, 0.96)',
           border: '1px solid var(--border-medium)',
           boxShadow: 'var(--shadow-glass)',
           borderRadius: 'var(--radius-lg)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative'
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div
+          className="review-modal-header"
           style={{
-            padding: '20px 24px',
+            padding: 'clamp(14px, 2vw, 20px) clamp(16px, 2.5vw, 24px)',
             borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '16px',
-            background: 'rgba(255, 255, 255, 0.02)'
+            background: 'rgba(255, 255, 255, 0.02)',
+            flexShrink: 0
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
             <div
               style={{
                 width: '36px',
@@ -653,14 +663,15 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 border: '1px solid var(--accent-lime-border)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                flexShrink: 0
               }}
             >
               <FileCheck size={18} color="var(--accent-lime)" />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: 'clamp(15px, 2vw, 18px)', fontWeight: 700, color: 'var(--text-primary)', margin: 0, wordBreak: 'break-word' }}>
                   {review.title}
                 </h2>
                 {(review.id === 'rev_spring_announcement_01' || review.id === 'rev_enterprise_overview_02') && (
@@ -680,7 +691,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 )}
                 <Badge status={review.status} size="sm" />
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px', wordBreak: 'break-word' }}>
                 Channel: <span style={{ color: 'var(--text-secondary)' }}>{review.channel}</span> · Author:{' '}
                 <span style={{ color: 'var(--text-secondary)' }}>{review.author}</span> · Updated: {review.updatedAt}
               </div>
@@ -697,7 +708,8 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
               color: 'var(--text-tertiary)',
               cursor: 'pointer',
               padding: '6px',
-              borderRadius: '6px'
+              borderRadius: '6px',
+              flexShrink: 0
             }}
           >
             <X size={20} />
@@ -705,7 +717,19 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
         </div>
 
         {/* Modal Scrollable Body */}
-        <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        <div
+          className="review-modal-body"
+          style={{
+            padding: 'clamp(16px, 2.5vw, 24px)',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            flex: '1 1 auto',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}
+        >
           {/* Honest Transparency Notice Banner */}
           <div
             style={{
@@ -733,7 +757,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))',
               gap: '12px'
             }}
           >
@@ -957,7 +981,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 borderBottom: '1px solid var(--border-subtle)'
               }}
             >
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setActiveDraftTab('revision')}
@@ -998,7 +1022,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
               </div>
 
               {activeDraftTab === 'revision' && (
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1097,6 +1121,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
           <div
             style={{
               display: 'flex',
+              flexWrap: 'wrap',
               gap: '6px',
               padding: '4px',
               background: 'rgba(255, 255, 255, 0.03)',
@@ -1109,7 +1134,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
               id="modal-tab-policy-findings"
               onClick={() => setActiveResultsSection('policy')}
               style={{
-                flex: 1,
+                flex: '1 1 140px',
                 padding: '8px 12px',
                 borderRadius: 'var(--radius-xs)',
                 fontSize: '12px',
@@ -1134,7 +1159,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
               id="modal-tab-ai-tone"
               onClick={() => setActiveResultsSection('ai')}
               style={{
-                flex: 1,
+                flex: '1 1 140px',
                 padding: '8px 12px',
                 borderRadius: 'var(--radius-xs)',
                 fontSize: '12px',
@@ -1176,7 +1201,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 id="modal-tab-visual-findings"
                 onClick={() => setActiveResultsSection('visual')}
                 style={{
-                  flex: 1,
+                  flex: '1 1 140px',
                   padding: '8px 12px',
                   borderRadius: 'var(--radius-xs)',
                   fontSize: '12px',
@@ -1860,138 +1885,6 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
               </div>
             )}
           </div>
-
-          {/* Decision Confirmation Modal Overlay if pending */}
-          {confirmAction && (
-            <div
-              style={{
-                padding: '16px 20px',
-                borderRadius: 'var(--radius-md)',
-                background: confirmAction === 'Approve' ? 'rgba(52, 211, 153, 0.1)' : 'rgba(248, 113, 113, 0.1)',
-                border: confirmAction === 'Approve' ? '1px solid #34D399' : '1px solid #F87171',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px'
-              }}
-            >
-              <div>
-                <strong style={{ color: confirmAction === 'Approve' ? '#34D399' : '#FCA5A5' }}>
-                  Confirm Content {confirmAction}:
-                </strong>
-                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {confirmAction === 'Approve'
-                    ? 'Confirm editorial sign-off for publication. Approval records a human governance decision against configured brand rules and does not imply universal factual verification.'
-                    : 'Are you sure you want to mark this review as Rejected? This decision will be permanently logged in the audit trail.'}
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button variant="secondary" size="sm" onClick={() => setConfirmAction(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant={confirmAction === 'Approve' ? 'primary' : 'secondary'}
-                  size="sm"
-                  style={
-                    confirmAction === 'Reject'
-                      ? { background: 'rgba(248, 113, 113, 0.2)', borderColor: '#F87171', color: '#FCA5A5' }
-                      : undefined
-                  }
-                  onClick={() =>
-                    handleExecuteDecision(
-                      confirmAction === 'Approve' ? 'Approved' : 'Rejected',
-                      confirmAction
-                    )
-                  }
-                >
-                  Yes, Confirm {confirmAction}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Human Review Decision Buttons */}
-          <div
-            style={{
-              paddingTop: '16px',
-              borderTop: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => handleExecuteDecision('Draft', 'Save Draft')}
-                iconLeft={<Save size={14} />}
-              >
-                Keep Pending / Save Draft
-              </Button>
-            </div>
-
-            {can('approve_review') ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {/* Request Changes Button */}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleExecuteDecision('Changes Requested', 'Request Changes')}
-                  style={{ borderColor: 'rgba(251, 146, 60, 0.4)', color: '#FDBA74' }}
-                  iconLeft={<RotateCcw size={14} />}
-                  id="review-request-changes-btn"
-                >
-                  Request Changes
-                </Button>
-
-                {/* Reject Button */}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setConfirmAction('Reject')}
-                  style={{ borderColor: 'rgba(248, 113, 113, 0.4)', color: '#FCA5A5' }}
-                  iconLeft={<X size={14} />}
-                  id="review-reject-btn"
-                >
-                  Reject
-                </Button>
-
-                {/* Approve Button */}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setConfirmAction('Approve')}
-                  iconLeft={<CheckCircle2 size={14} />}
-                  id="review-approve-btn"
-                >
-                  Approve
-                </Button>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'rgba(251, 191, 36, 0.08)',
-                  border: '1px solid rgba(251, 191, 36, 0.25)',
-                  color: '#FBBF24',
-                  fontSize: '12px'
-                }}
-              >
-                <Lock size={13} />
-                <span>Editor Role: Approval, rejection, and change requests require Reviewer or Admin authorization.</span>
-              </div>
-            )}
-          </div>
-
           {/* Gated Notice for Pending Review Statuses */}
           {review.status !== 'Approved' && review.status !== 'Published' && (
             <div
@@ -2559,6 +2452,154 @@ ${JSON.stringify(
               </div>
             </div>
           )}
+        </div>
+
+        {/* Modal Footer / Action Bar */}
+        <div
+          className="review-modal-footer"
+          style={{
+            padding: '12px clamp(16px, 2.5vw, 24px)',
+            borderTop: '1px solid var(--border-subtle)',
+            background: 'rgba(10, 13, 20, 0.98)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            flexShrink: 0,
+            zIndex: 10
+          }}
+        >
+          {/* Decision Confirmation Banner inside Footer if pending */}
+          {confirmAction && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-sm)',
+                background: confirmAction === 'Approve' ? 'rgba(52, 211, 153, 0.12)' : 'rgba(248, 113, 113, 0.12)',
+                border: confirmAction === 'Approve' ? '1px solid #34D399' : '1px solid #F87171',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                width: '100%'
+              }}
+            >
+              <div style={{ flex: '1 1 260px' }}>
+                <strong style={{ color: confirmAction === 'Approve' ? '#34D399' : '#FCA5A5', fontSize: '13px' }}>
+                  Confirm Content {confirmAction}:
+                </strong>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  {confirmAction === 'Approve'
+                    ? 'Confirm editorial sign-off for publication. Approval records a human governance decision against configured brand rules and does not imply universal factual verification.'
+                    : 'Are you sure you want to mark this review as Rejected? This decision will be permanently logged in the audit trail.'}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <Button variant="secondary" size="sm" onClick={() => setConfirmAction(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant={confirmAction === 'Approve' ? 'primary' : 'secondary'}
+                  size="sm"
+                  style={
+                    confirmAction === 'Reject'
+                      ? { background: 'rgba(248, 113, 113, 0.25)', borderColor: '#F87171', color: '#FCA5A5' }
+                      : undefined
+                  }
+                  onClick={() =>
+                    handleExecuteDecision(
+                      confirmAction === 'Approve' ? 'Approved' : 'Rejected',
+                      confirmAction
+                    )
+                  }
+                  id="confirm-decision-btn"
+                >
+                  Yes, Confirm {confirmAction}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons Row */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              width: '100%'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleExecuteDecision('Draft', 'Save Draft')}
+                iconLeft={<Save size={14} />}
+                id="review-save-draft-btn"
+              >
+                Keep Pending / Save Draft
+              </Button>
+            </div>
+
+            {can('approve_review') ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {/* Request Changes Button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleExecuteDecision('Changes Requested', 'Request Changes')}
+                  style={{ borderColor: 'rgba(251, 146, 60, 0.4)', color: '#FDBA74' }}
+                  iconLeft={<RotateCcw size={14} />}
+                  id="review-request-changes-btn"
+                >
+                  Request Changes
+                </Button>
+
+                {/* Reject Button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConfirmAction('Reject')}
+                  style={{ borderColor: 'rgba(248, 113, 113, 0.4)', color: '#FCA5A5' }}
+                  iconLeft={<X size={14} />}
+                  id="review-reject-btn"
+                >
+                  Reject
+                </Button>
+
+                {/* Approve Button */}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setConfirmAction('Approve')}
+                  iconLeft={<CheckCircle2 size={14} />}
+                  id="review-approve-btn"
+                >
+                  Approve
+                </Button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(251, 191, 36, 0.08)',
+                  border: '1px solid rgba(251, 191, 36, 0.25)',
+                  color: '#FBBF24',
+                  fontSize: '12px'
+                }}
+              >
+                <Lock size={13} />
+                <span>Editor Role: Approval, rejection, and change requests require Reviewer or Admin authorization.</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

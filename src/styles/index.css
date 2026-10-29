@@ -487,6 +487,91 @@ button {
   animation: spin 1s linear infinite;
 }
 
+/* -------------------------------------------------------------
+   RESPONSIVE REVIEW DETAIL MODAL SYSTEM
+   ------------------------------------------------------------- */
+.review-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 12, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: clamp(10px, 2.5vw, 24px);
+  overflow: hidden;
+}
+
+.review-modal-dialog {
+  max-width: 1040px;
+  width: 100%;
+  max-height: min(90vh, 90dvh);
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 16, 23, 0.96);
+  border: 1px solid var(--border-medium);
+  box-shadow: var(--shadow-glass);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+}
+
+.review-modal-header {
+  padding: clamp(14px, 2vw, 20px) clamp(16px, 2.5vw, 24px);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  flex-shrink: 0;
+}
+
+.review-modal-body {
+  padding: clamp(16px, 2.5vw, 24px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.review-modal-footer {
+  padding: 12px clamp(16px, 2.5vw, 24px);
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(10, 13, 20, 0.98);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+@media (max-width: 640px) {
+  .review-modal-backdrop {
+    padding: 8px;
+  }
+  .review-modal-dialog {
+    max-height: 94dvh;
+    border-radius: var(--radius-md);
+  }
+  .review-modal-header {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .review-modal-body {
+    padding: 14px;
+    gap: 16px;
+  }
+  .review-modal-footer {
+    padding: 10px 14px;
+  }
+}
+
 /* Respect user's reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
