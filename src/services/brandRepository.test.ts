@@ -12,7 +12,8 @@ import {
 import {
   brandStorage,
   DEFAULT_INITIAL_PROFILE,
-  DEFAULT_UNSUPPORTED_CLAIMS_RULE
+  DEFAULT_UNSUPPORTED_CLAIMS_RULE,
+  isSampleDemoReview
 } from './brandStorage.ts';
 import type { BrandProfile, BrandRule, ReviewItem } from '../types/index.ts';
 
@@ -469,8 +470,8 @@ describe('Database Repository & Data Mappers Tests', () => {
       assert.ok(result.error.includes('foreign key constraint violation'));
     });
 
-    test('16. syncLocalDataToDatabase succeeds across all tables when cloud accepts upserts', async () => {
-      // Seed local storage with profile, rule, and review
+    test('16. syncLocalDataToDatabase succeeds across all tables when cloud accepts upserts and excludes demo items', async () => {
+      // Seed local storage with profile, rule, and custom user review
       brandStorage.saveProfile({
         name: 'Sync Success Brand',
         description: 'Test',
@@ -480,11 +481,39 @@ describe('Database Repository & Data Mappers Tests', () => {
         preferredLanguage: 'English (US)'
       });
 
+      brandStorage.saveRule({
+        title: 'Custom Sync Rule',
+        category: 'Approved Facts',
+        description: 'Custom rule for testing sync'
+      });
+
+      brandStorage.saveReview({
+        id: 'rev_custom_user_sync_test',
+        title: 'User Written Content',
+        author: 'Emmanuel',
+        channel: 'Blog',
+        status: 'Needs review',
+        wordCount: 15,
+        issuesCount: 0,
+        confidenceScore: 100,
+        summary: 'User article',
+        originalDraft: 'Real content',
+        currentDraft: 'Real content',
+        rulesCheckedCount: 1,
+        findings: [],
+        decisionHistory: [],
+        revisions: []
+      });
+
       const upsertedTables: string[] = [];
+      const upsertedReviewIds: string[] = [];
       const mockClient = {
         from: (table: string) => ({
-          upsert: (_row: any, _opts: any) => {
+          upsert: (row: any, _opts: any) => {
             upsertedTables.push(table);
+            if (table === 'brand_reviews') {
+              upsertedReviewIds.push(row.id);
+            }
             return Promise.resolve({ data: null, error: null });
           }
         })
@@ -501,6 +530,11 @@ describe('Database Repository & Data Mappers Tests', () => {
       assert.ok(upsertedTables.includes('brand_profiles'));
       assert.ok(upsertedTables.includes('brand_rules'));
       assert.ok(upsertedTables.includes('brand_reviews'));
+
+      // Crucial: Built-in demo sample reviews MUST NOT be pushed to cloud PostgreSQL
+      assert.ok(upsertedReviewIds.includes('rev_custom_user_sync_test'));
+      assert.ok(!upsertedReviewIds.includes('rev_spring_announcement_01'), 'Demo sample 1 excluded');
+      assert.ok(!upsertedReviewIds.includes('rev_enterprise_overview_02'), 'Demo sample 2 excluded');
     });
 
     test('17. syncLocalDataToDatabase aggregates errors if a table fails without losing other syncs', async () => {
@@ -532,6 +566,148 @@ describe('Database Repository & Data Mappers Tests', () => {
       assert.ok(syncResult.rulesCount >= 1, 'Rules succeeded');
       assert.ok(syncResult.errors.length > 0, 'Captured review failure');
       assert.ok(syncResult.errors.some((e) => e.includes('Review table lock timeout')));
+    });
+
+    test('18. Remote empty tables return empty results without auto-pushing demo data', async () => {
+      let upsertCalled = false;
+      const mockClient = {
+        from: (_table: string) => ({
+          select: () => ({
+            order: () => ({
+              limit: () => Promise.resolve({ data: [], error: null })
+            }),
+            limit: () => Promise.resolve({ data: [], error: null })
+          }),
+          upsert: () => {
+            upsertCalled = true;
+            return Promise.resolve({ data: null, error: null });
+          }
+        })
+      };
+
+      brandRepository.setClientForTesting(mockClient);
+      const profile = await brandRepository.getProfile();
+      assert.equal(profile, null);
+      assert.equal(upsertCalled, false, 'Did not auto-push demo profile to remote database');
+    });
+
+    test('19. Serialization roundtrip preserves visual findings, image metadata, revisions, decision history, and publishing record', () => {
+      const fullReview: ReviewItem = {
+        id: 'rev_serialization_test',
+        title: 'Complete Serialization Test',
+        author: 'Lead Auditor',
+        channel: 'LinkedIn',
+        status: 'Published',
+        updatedAt: 'Just now',
+        wordCount: 120,
+        issuesCount: 1,
+        confidenceScore: 92,
+        summary: 'Comprehensive review serialization test',
+        originalDraft: 'Original copy text',
+        currentDraft: 'Approved copy text',
+        rulesCheckedCount: 8,
+        findings: [{
+          id: 'f_1',
+          ruleId: 'r_1',
+          ruleTitle: 'Verified Fact',
+          ruleCategory: 'Approved Facts',
+          severity: 'Low',
+          explanation: 'Good',
+          hasVerifiedPolicyEvidence: true,
+          citationLabel: 'Doc v1.0'
+        }],
+        decisionHistory: [{
+          id: 'dec_1',
+          action: 'Publish',
+          reviewerName: 'Admin Sarah',
+          reviewerComment: 'Verified and published',
+          timestamp: '2026-10-28T12:00:00.000Z',
+          previousStatus: 'Approved',
+          newStatus: 'Published'
+        }],
+        revisions: [{
+          id: 'rev_1',
+          revisionNumber: 1,
+          text: 'Edited draft',
+          editedAt: '2026-10-28T11:00:00.000Z',
+          findingsCount: 0,
+          score: 100
+        }],
+        imageAsset: {
+          id: 'img_test_1',
+          fileName: 'banner.png',
+          fileType: 'image/png',
+          fileSize: 45000,
+          altText: 'A high contrast brand logo',
+          width: 800,
+          height: 600
+        },
+        visualFindings: [{
+          id: 'vis_1',
+          category: 'Logo & Visual Identity',
+          severity: 'Critical',
+          title: 'Logo Clearance Violation',
+          description: 'Insufficient margin around primary logo',
+          observableEvidence: 'Margin is 8px, required 16px',
+          isUncertain: false,
+          confidence: 'High',
+          suggestedRemedy: 'Increase clear space around logo',
+          hasVerifiedPolicyEvidence: true,
+          citationLabel: 'Brand Identity Guide §3.1'
+        }],
+        visualAnalysisStatus: 'completed',
+        visualProvider: 'gemini',
+        visualModel: 'gemini-2.5-flash',
+        publishingStatus: 'published',
+        publishingRecord: {
+          idempotencyKey: 'pub_rev_serialization_test_abc123',
+          destinationUrl: 'https://api.cms.corp/v1/webhook',
+          destinationName: 'Corporate CMS',
+          status: 'published',
+          publishedAt: '2026-10-28T12:00:05.000Z',
+          lastAttemptAt: '2026-10-28T12:00:05.000Z',
+          attemptCount: 1,
+          statusCode: 200,
+          externalReference: 'cms_prod_9981',
+          isSimulated: false
+        },
+        isSample: false
+      };
+
+      const row = reviewToRow(fullReview);
+      assert.equal(row.id, 'rev_serialization_test');
+      assert.equal(row.publishing_status, 'published');
+      assert.ok(row.publishing_record);
+      assert.equal(row.publishing_record.destinationName, 'Corporate CMS');
+      assert.ok(row.image_asset);
+      assert.equal(row.image_asset.altText, 'A high contrast brand logo');
+      assert.equal(row.visual_findings.length, 1);
+      assert.equal(row.visual_findings[0].category, 'Logo & Visual Identity');
+      assert.equal(row.revisions.length, 1);
+      assert.equal(row.decision_history.length, 1);
+
+      const deserialized = rowToReview(row);
+      assert.equal(deserialized.id, fullReview.id);
+      assert.equal(deserialized.title, fullReview.title);
+      assert.equal(deserialized.status, 'Published');
+      assert.equal(deserialized.publishingStatus, 'published');
+      assert.equal(deserialized.publishingRecord?.externalReference, 'cms_prod_9981');
+      assert.equal(deserialized.publishingRecord?.isSimulated, false);
+      assert.equal(deserialized.imageAsset?.altText, 'A high contrast brand logo');
+      assert.equal(deserialized.visualFindings?.length, 1);
+      assert.equal(deserialized.visualFindings?.[0].citationLabel, 'Brand Identity Guide §3.1');
+      assert.equal(deserialized.revisions?.length, 1);
+      assert.equal(deserialized.decisionHistory?.length, 1);
+      assert.equal(deserialized.decisionHistory?.[0].reviewerName, 'Admin Sarah');
+      assert.equal(deserialized.isSample, false);
+    });
+
+    test('20. isSampleDemoReview accurately identifies default mock reviews', () => {
+      assert.equal(isSampleDemoReview('rev_spring_announcement_01'), true);
+      assert.equal(isSampleDemoReview('rev_enterprise_overview_02'), true);
+      assert.equal(isSampleDemoReview('rev_user_created_123'), false);
+      assert.equal(isSampleDemoReview(undefined), false);
+      assert.equal(isSampleDemoReview(null), false);
     });
   });
 });

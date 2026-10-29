@@ -77,8 +77,26 @@ CREATE TABLE IF NOT EXISTS brand_reviews (
   ai_suggestions JSONB DEFAULT '[]'::jsonb NOT NULL,
   ai_analysis_status TEXT,
   ai_analysis_error TEXT,
+  publishing_status TEXT,
+  publishing_record JSONB,
+  image_asset JSONB,
+  visual_findings JSONB DEFAULT '[]'::jsonb NOT NULL,
+  visual_analysis_status TEXT,
+  visual_analysis_error TEXT,
+  visual_provider TEXT,
+  visual_model TEXT,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ------------------------------------------------------------------------
+-- 4. Table: user_roles
+-- Authoritative server-side role resolution for verified users
+-- ------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.user_roles (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('Admin', 'Reviewer', 'Editor')),
+  assigned_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- ------------------------------------------------------------------------
@@ -91,6 +109,8 @@ CREATE INDEX IF NOT EXISTS idx_brand_reviews_brand_id ON brand_reviews(brand_id)
 CREATE INDEX IF NOT EXISTS idx_brand_reviews_status ON brand_reviews(status);
 CREATE INDEX IF NOT EXISTS idx_brand_reviews_channel ON brand_reviews(channel);
 CREATE INDEX IF NOT EXISTS idx_brand_reviews_created_at ON brand_reviews(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_brand_reviews_publishing_status ON brand_reviews(publishing_status);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON public.user_roles(user_id);
 
 -- ------------------------------------------------------------------------
 -- Row Level Security (RLS) Policies
@@ -98,6 +118,7 @@ CREATE INDEX IF NOT EXISTS idx_brand_reviews_created_at ON brand_reviews(created
 ALTER TABLE brand_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE brand_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE brand_reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 
 -- Anonymous/Public access policies for Hackathon workspace demonstration
 -- Allows frontend authenticated/anon client to read, insert, update, delete
@@ -115,6 +136,10 @@ CREATE POLICY "Allow public read on brand_reviews" ON brand_reviews FOR SELECT U
 CREATE POLICY "Allow public insert on brand_reviews" ON brand_reviews FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update on brand_reviews" ON brand_reviews FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete on brand_reviews" ON brand_reviews FOR DELETE USING (true);
+
+-- Strict RLS for user_roles: Users read own role; only service_role manages roles
+CREATE POLICY "Users can read own role" ON public.user_roles FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Service role manages user roles" ON public.user_roles FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------
 -- Initial Baseline Data Seed

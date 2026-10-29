@@ -248,7 +248,7 @@ export async function handleAiToneReview(
   const geminiKey =
     envOverrides && envOverrides.geminiApiKey !== undefined
       ? envOverrides.geminiApiKey
-      : getEnv('GEMINI_API_KEY')?.trim();
+      : (getEnv('GEMINI_API_KEY')?.trim() || getEnv('GOOGLE_API_KEY')?.trim());
   const anthropicKey =
     envOverrides && envOverrides.anthropicApiKey !== undefined
       ? envOverrides.anthropicApiKey
@@ -362,10 +362,13 @@ export async function handleAiToneReview(
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': geminiKey
+        },
         body: JSON.stringify({
           contents: [
             {

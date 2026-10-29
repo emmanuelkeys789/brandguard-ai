@@ -370,6 +370,16 @@ button {
   box-shadow: 0 0 6px var(--accent-lime-glow);
 }
 
+.badge-published {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38BDF8;
+}
+.badge-published .badge-dot {
+  background: #38BDF8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+}
+
 .badge-rejected {
   background: var(--accent-rose-dim);
   border: 1px solid rgba(248, 113, 113, 0.35);

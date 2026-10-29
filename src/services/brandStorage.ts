@@ -1,5 +1,6 @@
 import type { BrandProfile, BrandRule, RuleCategory, RuleSeverity, CommunicationTone, ReviewItem, ReviewDecisionRecord } from '../types';
 import { evaluateDraft, calculateComplianceScore } from './ruleEngine.ts';
+import { isValidReviewStateTransition } from './reviewTransitions.ts';
 
 export const STORAGE_KEY_PROFILE = 'brandguard_brand_profile';
 export const STORAGE_KEY_RULES = 'brandguard_brand_rules';
@@ -92,9 +93,24 @@ export const DEFAULT_UNSUPPORTED_CLAIMS_RULE: BrandRule = {
   updatedAt: '2026-10-22T08:00:00.000Z'
 };
 
+export const SAMPLE_DEMO_REVIEW_IDS = [
+  'rev_spring_announcement_01',
+  'rev_enterprise_overview_02'
+] as const;
+
+/**
+ * Checks whether a given review ID corresponds to a seeded demo sample review
+ * that should not be automatically treated as an authoritative cloud record.
+ */
+export function isSampleDemoReview(id?: string | null): boolean {
+  if (!id) return false;
+  return id === 'rev_spring_announcement_01' || id === 'rev_enterprise_overview_02';
+}
+
 export const DEFAULT_INITIAL_REVIEWS: ReviewItem[] = [
   {
     id: 'rev_spring_announcement_01',
+    isSample: true,
     title: 'Spring Campaign Announcement Draft',
     author: 'Workspace Reviewer',
     channel: 'Press Release',
@@ -161,6 +177,7 @@ export const DEFAULT_INITIAL_REVIEWS: ReviewItem[] = [
   },
   {
     id: 'rev_enterprise_overview_02',
+    isSample: true,
     title: 'Enterprise Brand Governance Overview',
     author: 'Workspace Reviewer',
     channel: 'Product Overview',
@@ -646,6 +663,29 @@ export const brandStorage = {
     const id = input.id || `rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const existingIdx = input.id ? reviews.findIndex((r) => r.id === input.id) : -1;
     const existing = existingIdx >= 0 ? reviews[existingIdx] : undefined;
+
+    // Validate review state transition and publishing restrictions
+    if (input.status) {
+      const transitionCheck = isValidReviewStateTransition(existing?.status, input.status);
+      if (!transitionCheck.valid) {
+        return {
+          success: false,
+          error: transitionCheck.reason || 'Invalid review state transition.'
+        };
+      }
+
+      // Prevent repeated publishing of already published content
+      if (existing?.status === 'Published' && input.status === 'Published') {
+        const existingPublishCount = (existing.decisionHistory || []).filter((d) => d.action === 'Publish').length;
+        const inputPublishCount = (input.decisionHistory || []).filter((d) => d.action === 'Publish').length;
+        if (inputPublishCount > existingPublishCount) {
+          return {
+            success: false,
+            error: 'Content has already been published. Repeated publishing is prevented to protect downstream systems from duplicate dispatches.'
+          };
+        }
+      }
+    }
 
     // Preserve original draft immutably - NEVER use summary text
     let originalDraft = '';

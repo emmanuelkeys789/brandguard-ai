@@ -195,6 +195,7 @@ export const SettingsTab: React.FC = () => {
               { label: 'Approve & Reject Content Reviews', permitted: can('approve_review'), roleReq: 'Admin & Reviewer' },
               { label: 'Request Changes on Reviews', permitted: can('request_changes'), roleReq: 'Admin & Reviewer' },
               { label: 'Author Content & Apply AI Rewrites', permitted: can('create_draft'), roleReq: 'All roles' },
+              { label: 'Dispatch Webhook Publishing', permitted: can('publish_review'), roleReq: 'Admin & Reviewer' },
               { label: 'Delete Past Workspace Reviews', permitted: can('delete_review'), roleReq: 'Admin only' }
             ].map((perm) => (
               <div
@@ -267,18 +268,51 @@ export const SettingsTab: React.FC = () => {
               gap: '6px',
               padding: '4px 12px',
               borderRadius: 'var(--radius-full)',
-              background: dbState.status === 'connected' ? 'rgba(52, 211, 153, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+              background:
+                dbState.status === 'connected'
+                  ? dbState.hasSyncFailure
+                    ? 'rgba(245, 158, 11, 0.12)'
+                    : 'rgba(52, 211, 153, 0.12)'
+                  : dbState.status === 'error'
+                  ? 'rgba(239, 68, 68, 0.12)'
+                  : 'rgba(255, 255, 255, 0.05)',
               border: '1px solid',
-              borderColor: dbState.status === 'connected' ? 'rgba(52, 211, 153, 0.35)' : 'var(--border-subtle)',
+              borderColor:
+                dbState.status === 'connected'
+                  ? dbState.hasSyncFailure
+                    ? 'rgba(245, 158, 11, 0.35)'
+                    : 'rgba(52, 211, 153, 0.35)'
+                  : dbState.status === 'error'
+                  ? 'rgba(239, 68, 68, 0.35)'
+                  : 'var(--border-subtle)',
               fontSize: '12px',
               fontWeight: 600,
-              color: dbState.status === 'connected' ? '#34D399' : 'var(--text-secondary)'
+              color:
+                dbState.status === 'connected'
+                  ? dbState.hasSyncFailure
+                    ? '#F59E0B'
+                    : '#34D399'
+                  : dbState.status === 'error'
+                  ? '#EF4444'
+                  : 'var(--text-secondary)'
             }}
           >
             {dbState.status === 'connected' ? (
+              dbState.hasSyncFailure ? (
+                <>
+                  <AlertCircle size={13} color="#F59E0B" />
+                  <span>Cloud Sync Warning</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={13} color="#34D399" />
+                  <span>Supabase PostgreSQL Connected ({dbState.latencyMs ?? 5}ms)</span>
+                </>
+              )
+            ) : dbState.status === 'error' ? (
               <>
-                <CheckCircle2 size={13} color="#34D399" />
-                <span>Supabase PostgreSQL Connected ({dbState.latencyMs}ms)</span>
+                <XCircle size={13} color="#EF4444" />
+                <span>Cloud Offline (Fallback Mode)</span>
               </>
             ) : (
               <>
@@ -289,12 +323,63 @@ export const SettingsTab: React.FC = () => {
           </div>
         </div>
 
+        {/* Sync Failure or Connection Error Alerts */}
+        {dbState.hasSyncFailure && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              color: '#F59E0B',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              margin: '12px 0'
+            }}
+          >
+            <AlertCircle size={15} />
+            <span>
+              <strong>Cloud Synchronization Warning:</strong> {dbState.errorMessage || 'Some records failed to sync with PostgreSQL. Your work is preserved safely in local storage.'}
+            </span>
+          </div>
+        )}
+
+        {dbState.status === 'error' && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#EF4444',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              margin: '12px 0'
+            }}
+          >
+            <XCircle size={15} />
+            <span>
+              <strong>Database Connection Error:</strong> {dbState.errorMessage || 'Unable to connect to Supabase. Falling back to local offline storage.'}
+            </span>
+          </div>
+        )}
+
         {/* Status Explanation */}
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '14px 0 16px 0' }}>
           {dbState.status === 'connected'
-            ? `Your workspace is connected to Supabase PostgreSQL at ${dbState.url}. Profiles, rules, reviews, and decision audit logs persist directly in the cloud database.`
+            ? `Your workspace is connected to Supabase PostgreSQL at ${dbState.url}. Profiles, rules, user reviews, and decision audit logs persist directly in the cloud database. Built-in demo sample items are excluded from cloud synchronization to keep production tables clean.`
             : 'BrandGuard AI is operating in standalone LocalStorage mode. All brand profiles, custom rules, submitted drafts, and audit trails persist safely in your browser.'}
         </p>
+
+        {dbState.lastSyncAt && (
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '12px', fontFamily: 'var(--font-mono)' }}>
+            Last cloud synchronization: {new Date(dbState.lastSyncAt).toLocaleString()}
+          </div>
+        )}
 
         {/* Database Quick Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>

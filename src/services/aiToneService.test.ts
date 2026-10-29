@@ -578,5 +578,71 @@ describe('AI Tone & Context Review Tests', () => {
       assert.strictEqual(firstPass.findings.length, 1);
       assert.strictEqual(secondPass.findings.length, 0);
     });
+
+    it('handles Gemini tone review securely with x-goog-api-key header and without key in query URL', async () => {
+      const originalFetch = globalThis.fetch;
+      let requestedUrl = '';
+      let requestedHeaders: Record<string, string> = {};
+
+      globalThis.fetch = (async (url: any, opts: any) => {
+        requestedUrl = String(url);
+        requestedHeaders = opts?.headers || {};
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        suggestions: [
+                          {
+                            id: 'sugg_gemini_1',
+                            toneCategory: 'Tone & Voice',
+                            severity: 'Medium',
+                            quotedText: 'Our platform is magical',
+                            explanation: 'Avoid tech cliches.',
+                            suggestedAlternative: 'Our platform provides deterministic automation',
+                            confidence: 'High'
+                          }
+                        ]
+                      })
+                    }
+                  ]
+                }
+              }
+            ]
+          }),
+          text: async () => ''
+        } as any;
+      }) as any;
+
+      try {
+        const response = await handleAiToneReview(
+          {
+            content: 'Our platform is magical and fixes all problems.',
+            brandProfile: mockProfile,
+            brandRules: mockRules
+          },
+          {
+            openaiApiKey: '',
+            geminiApiKey: 'test-gemini-secret-key-999'
+          }
+        );
+
+        assert.strictEqual(response.status, 'completed');
+        assert.strictEqual(response.provider, 'gemini');
+        assert.strictEqual(response.suggestions.length, 1);
+        assert.strictEqual(response.suggestions[0].id, 'sugg_gemini_1');
+        assert.ok(requestedUrl.includes('generativelanguage.googleapis.com'));
+        // Security assertion: API key must NOT be in the query URL
+        assert.strictEqual(requestedUrl.includes('test-gemini-secret-key-999'), false);
+        // Security assertion: API key must be in x-goog-api-key header
+        assert.strictEqual(requestedHeaders['x-goog-api-key'], 'test-gemini-secret-key-999');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 });

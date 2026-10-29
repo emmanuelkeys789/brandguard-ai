@@ -58,7 +58,7 @@ export const CAROUSEL_SLIDES: CarouselSlide[] = [
       'BrandGuard recommends intelligent, brand-compliant rewrites while leaving full control in the hands of marketing leads and legal reviewers. One-click acceptance, inline adjustments, and auditable sign-off chains ensure zero friction.',
     keyPoints: [
       'Side-by-side revision diffs with 1-click replacement',
-      'Immutable sign-off audit trail for legal & risk compliance',
+      'Comprehensive sign-off audit trail and review history',
       'Collaborative annotations for cross-functional marketing teams'
     ],
     mockCard: {

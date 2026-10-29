@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Download, Search, FileText, Plus, Trash2, ExternalLink } from 'lucide-react';
+import { Download, Search, FileText, Plus, Trash2, ExternalLink, ShieldAlert } from 'lucide-react';
 import { useBrand } from '../../context/useBrand';
 import { useAuth } from '../../context/useAuth';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { ReviewDetailModal } from './ReviewDetailModal';
+import { brandRepository } from '../../services/brandRepository';
 import type { DashboardTab, ReviewItem } from '../../types';
 
 interface HistoryTabProps {
@@ -18,7 +19,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({ onNavigateTab }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReview, setSelectedReview] = useState<ReviewItem | null>(null);
 
-  const statuses = ['All', 'Needs review', 'Changes Requested', 'In review', 'Approved', 'Rejected', 'Draft'];
+  const statuses = ['All', 'Needs review', 'Changes Requested', 'In review', 'Approved', 'Published', 'Rejected', 'Draft'];
 
   const filteredHistory = reviews.filter((item) => {
     const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
@@ -133,6 +134,35 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({ onNavigateTab }) => {
         </div>
       ) : (
         <>
+          {/* Audit Storage Integrity Disclosure Banner */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+              padding: '10px 16px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '11px',
+              color: 'var(--text-tertiary)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldAlert size={13} color="var(--accent-lime)" />
+              <span>
+                <strong style={{ color: 'var(--text-secondary)' }}>Audit Trail Integrity Note: </strong>
+                Reviews and decision records are saved in{' '}
+                <strong style={{ color: brandRepository.isCloudConfigured() ? '#34D399' : '#FBBF24' }}>
+                  {brandRepository.isCloudConfigured() ? 'Cloud PostgreSQL' : 'Local Browser Storage (Demo Mode)'}
+                </strong>
+                . Client-side storage cannot guarantee append-only ledger immutability; production enterprise audit compliance requires Cloud PostgreSQL with Row-Level Security (RLS).
+              </span>
+            </div>
+          </div>
+
           {/* Filter and Search Bar */}
           <div
             className="glass-panel"
@@ -357,8 +387,10 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({ onNavigateTab }) => {
           brandProfile={brandProfile}
           onClose={() => setSelectedReview(null)}
           onUpdateReview={(updated) => {
-            saveReview(updated);
-            setSelectedReview(updated);
+            const success = saveReview(updated);
+            if (success) {
+              setSelectedReview(updated);
+            }
           }}
           showToast={showToast}
         />

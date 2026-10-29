@@ -8,7 +8,9 @@ import {
   PlusCircle,
   ShieldAlert,
   Check,
-  X
+  X,
+  Database,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useBrand } from '../../context/useBrand';
@@ -24,7 +26,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onToggleMobileSidebar,
   onNewReviewClick
 }) => {
-  const { brandProfile } = useBrand();
+  const { brandProfile, dbState } = useBrand();
   const { currentRole, currentUser, switchRole, availableUsers } = useAuth();
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
@@ -154,8 +156,64 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         </div>
 
-        {/* Right: Demo Role Selector, Quick Action, Notifications, Help */}
+        {/* Right: Storage Transparency, Demo Role Selector, Quick Action, Notifications, Help */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Storage Backend Transparency Indicator */}
+          {(() => {
+            let indicatorBg = 'rgba(255, 255, 255, 0.03)';
+            let indicatorBorder = 'var(--border-subtle)';
+            let indicatorColor = 'var(--text-tertiary)';
+            let indicatorText = 'Local Storage (Demo)';
+            let indicatorTitle = 'Operating in offline LocalStorage demo mode. Cloud database not configured.';
+            let icon = <Database size={13} color="var(--text-tertiary)" />;
+
+            if (dbState.status === 'connected') {
+              if (dbState.hasSyncFailure) {
+                indicatorBg = 'rgba(245, 158, 11, 0.12)';
+                indicatorBorder = 'rgba(245, 158, 11, 0.35)';
+                indicatorColor = '#F59E0B';
+                indicatorText = 'Cloud Sync Warning';
+                indicatorTitle = `Supabase connected, but sync issues reported: ${dbState.errorMessage || 'Review sync failures'}`;
+                icon = <AlertTriangle size={13} color="#F59E0B" />;
+              } else {
+                indicatorBg = 'rgba(52, 211, 153, 0.08)';
+                indicatorBorder = 'rgba(52, 211, 153, 0.3)';
+                indicatorColor = '#34D399';
+                indicatorText = 'Cloud PostgreSQL';
+                indicatorTitle = 'Connected to Supabase PostgreSQL (Cloud Active)';
+                icon = <Database size={13} color="#34D399" />;
+              }
+            } else if (dbState.status === 'error') {
+              indicatorBg = 'rgba(239, 68, 68, 0.12)';
+              indicatorBorder = 'rgba(239, 68, 68, 0.35)';
+              indicatorColor = '#EF4444';
+              indicatorText = 'Cloud Offline (Fallback)';
+              indicatorTitle = `Cloud connection failed: ${dbState.errorMessage || 'Falling back to Local Storage'}`;
+              icon = <AlertTriangle size={13} color="#EF4444" />;
+            }
+
+            return (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: indicatorBg,
+                  border: '1px solid',
+                  borderColor: indicatorBorder,
+                  fontSize: '11px',
+                  color: indicatorColor
+                }}
+                title={indicatorTitle}
+              >
+                {icon}
+                <span style={{ fontWeight: 500 }}>{indicatorText}</span>
+              </div>
+            );
+          })()}
+
           {/* Demo Role / Simulated User Selector */}
           <div style={{ position: 'relative' }}>
             <button

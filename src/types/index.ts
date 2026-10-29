@@ -1,4 +1,20 @@
-export type ReviewStatus = 'Needs review' | 'In review' | 'Approved' | 'Rejected' | 'Draft' | 'Changes Requested';
+export type ReviewStatus = 'Needs review' | 'In review' | 'Approved' | 'Rejected' | 'Draft' | 'Changes Requested' | 'Published';
+
+export type PublishingStatus = 'idle' | 'queued' | 'publishing' | 'published' | 'failed';
+
+export interface PublishingRecord {
+  idempotencyKey: string;
+  destinationUrl: string;
+  destinationName?: string;
+  status: PublishingStatus;
+  publishedAt?: string;
+  lastAttemptAt: string;
+  attemptCount: number;
+  externalReference?: string;
+  statusCode?: number;
+  error?: string;
+  isSimulated?: boolean;
+}
 
 export type CommunicationTone =
   | 'Professional'
@@ -46,7 +62,7 @@ export type SeverityLevel = 'Critical' | 'High' | 'Medium' | 'Low' | 'Warning' |
 
 export interface ReviewDecisionRecord {
   id: string;
-  action: 'Approve' | 'Request Changes' | 'Reject' | 'Save Draft' | 'Submit Revision';
+  action: 'Approve' | 'Request Changes' | 'Reject' | 'Save Draft' | 'Submit Revision' | 'Publish' | 'Publish Retry';
   reviewerName: string;
   reviewerComment?: string;
   timestamp: string;
@@ -144,6 +160,9 @@ export interface ReviewItem {
   visualAnalysisError?: string;
   visualProvider?: string;
   visualModel?: string;
+  publishingStatus?: PublishingStatus;
+  publishingRecord?: PublishingRecord;
+  isSample?: boolean;
 }
 
 export type VisualCategory =

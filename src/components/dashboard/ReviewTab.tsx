@@ -18,7 +18,8 @@ import {
   Bot,
   RefreshCw,
   Loader2,
-  Eye
+  Eye,
+  ArrowRight
 } from 'lucide-react';
 import { SAMPLE_DRAFTS } from '../../data/demoData';
 import { useBrand } from '../../context/useBrand';
@@ -32,7 +33,8 @@ import { VisualFindingsCard } from '../review/VisualFindingsCard';
 import {
   multimodalService,
   generateThumbnail,
-  prepareImageForAnalysis
+  prepareImageForAnalysis,
+  generateSampleCreativeFile
 } from '../../services/multimodalReview';
 import type {
   DashboardTab,
@@ -70,6 +72,8 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
   // Review Engine State
   const [reviewResult, setReviewResult] = useState<ReviewEngineResult | null>(null);
   const [savedToHistory, setSavedToHistory] = useState<boolean>(false);
+  const [savedReviewId, setSavedReviewId] = useState<string | null>(null);
+  const [isSubmittingReview, setIsSubmittingReview] = useState<boolean>(false);
   const [resultsGuideOpen, setResultsGuideOpen] = useState(false);
 
   // Editable suggestions state: finding.id -> user edited replacement string
@@ -182,6 +186,25 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     handleRemoveImage();
   };
 
+  const handleLoadSampleWithCreative = async (type: 'unverified' | 'compliant' = 'unverified') => {
+    handleLoadSample(type);
+    try {
+      const sampleFile = await generateSampleCreativeFile();
+      if (sampleFile) {
+        handleSelectImage(sampleFile);
+        const sampleAlt = 'BrandGuard AI shield logo and enterprise compliance banner on dark slate canvas';
+        setImageAltText(sampleAlt);
+        showToast(
+          'info',
+          'Sample Draft & Creative Asset Loaded',
+          'Populated campaign draft and generated sample brand creative with descriptive alt-text.'
+        );
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
   const handleClear = () => {
     setDraftTitle('');
     setContent('');
@@ -190,6 +213,7 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
     setValidationError(null);
     setReviewResult(null);
     setSavedToHistory(false);
+    setSavedReviewId(null);
     setAppliedFindingIds(new Set());
     setEditedCorrections({});
     setAiStatus('idle');
@@ -425,100 +449,113 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
   };
 
   const handleSaveToPastReviews = async () => {
-    if (!content.trim()) return;
-
-    const title = draftTitle.trim() || `Draft Check - ${channel}`;
-
-    // Fresh deterministic evaluation to guarantee saved findings strictly reflect current draft and enabled rules
-    const currentEvaluation = evaluateDraft(content, enabledRules, {
-      brandProfile,
-      campaignTitle: title
-    });
-
-    setReviewResult(currentEvaluation);
-
-    // Initial status requires editorial review; never automatically approved
-    const initialStatus = 'Needs review';
-    const originalDraftText = originalSubmittedDraft || content;
-    const initialScore = firstPassResult ? firstPassResult.score : currentEvaluation.score;
-    const initialIssuesCount = firstPassResult ? firstPassResult.findings.length : currentEvaluation.findings.length;
-    const initialFindings = firstPassResult ? firstPassResult.findings : currentEvaluation.findings;
-
-    let thumbnailDataUrl: string | undefined;
-    if (selectedImageFile) {
-      try {
-        thumbnailDataUrl = await generateThumbnail(selectedImageFile, 120);
-      } catch {
-        // Thumbnail generation fallback
-      }
+    if (!content.trim() || isSubmittingReview) return;
+    if (savedToHistory) {
+      onNavigateTab?.('history');
+      return;
     }
 
-    const imageAsset: ImageAsset | undefined = selectedImageFile
-      ? {
-          id: `img_${Date.now()}`,
-          fileName: selectedImageFile.name,
-          fileType: selectedImageFile.type,
-          fileSize: selectedImageFile.size,
-          altText: imageAltText.trim() || undefined,
-          thumbnailDataUrl
-        }
-      : undefined;
+    setIsSubmittingReview(true);
+    try {
+      const title = draftTitle.trim() || `Draft Check - ${channel}`;
 
-    const saved = saveReview({
-      title,
-      author: currentUser.name,
-      channel,
-      status: initialStatus,
-      wordCount: content.trim().split(/\s+/).filter(Boolean).length,
-      issuesCount: currentEvaluation.findings.length,
-      confidenceScore: currentEvaluation.score,
-      summary: currentEvaluation.summaryText,
-      originalDraft: originalDraftText,
-      currentDraft: content,
-      findings: currentEvaluation.findings,
-      firstPassFindings: initialFindings,
-      firstPassIssuesCount: initialIssuesCount,
-      firstPassScore: initialScore,
-      rulesCheckedCount: currentEvaluation.checkedRulesCount,
-      imageAsset,
-      visualFindings: visualFindings.length > 0 ? visualFindings : undefined,
-      visualAnalysisStatus: visualStatus,
-      visualAnalysisError: visualError || undefined,
-      visualProvider,
-      visualModel,
-      revisions:
-        content !== originalDraftText
-          ? [
-              {
-                id: `rev_${Date.now()}`,
-                revisionNumber: 1,
-                text: content,
-                editedAt: new Date().toISOString(),
-                findingsCount: currentEvaluation.findings.length,
-                score: currentEvaluation.score
-              }
-            ]
-          : [],
-      aiSuggestions: aiSuggestions.length > 0 ? aiSuggestions : undefined,
-      aiAnalysisStatus: aiStatus,
-      aiAnalysisError: aiError || undefined,
-      decisionHistory: [
-        {
-          id: `dec_${Date.now()}`,
-          action: 'Save Draft',
-          reviewerName: currentUser.name,
-          reviewerComment: currentEvaluation.isCompliant
-            ? 'Deterministic check passed (0 rule violations). Awaiting human review sign-off.'
-            : `Flagged ${currentEvaluation.findings.length} rule violation(s) requiring human editorial review.`,
-          timestamp: new Date().toISOString(),
-          previousStatus: 'Draft',
-          newStatus: initialStatus
-        }
-      ]
-    });
+      // Fresh deterministic evaluation to guarantee saved findings strictly reflect current draft and enabled rules
+      const currentEvaluation = evaluateDraft(content, enabledRules, {
+        brandProfile,
+        campaignTitle: title
+      });
 
-    if (saved) {
-      setSavedToHistory(true);
+      setReviewResult(currentEvaluation);
+
+      // Initial status requires editorial review; never automatically approved
+      const initialStatus = 'Needs review';
+      const originalDraftText = originalSubmittedDraft || content;
+      const initialScore = firstPassResult ? firstPassResult.score : currentEvaluation.score;
+      const initialIssuesCount = firstPassResult ? firstPassResult.findings.length : currentEvaluation.findings.length;
+      const initialFindings = firstPassResult ? firstPassResult.findings : currentEvaluation.findings;
+
+      let thumbnailDataUrl: string | undefined;
+      if (selectedImageFile) {
+        try {
+          thumbnailDataUrl = await generateThumbnail(selectedImageFile, 120);
+        } catch {
+          // Thumbnail generation fallback
+        }
+      }
+
+      const imageAsset: ImageAsset | undefined = selectedImageFile
+        ? {
+            id: `img_${Date.now()}`,
+            fileName: selectedImageFile.name,
+            fileType: selectedImageFile.type,
+            fileSize: selectedImageFile.size,
+            altText: imageAltText.trim() || undefined,
+            thumbnailDataUrl
+          }
+        : undefined;
+
+      const targetReviewId = savedReviewId || `rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+      const saved = saveReview({
+        id: targetReviewId,
+        title,
+        author: currentUser.name,
+        channel,
+        status: initialStatus,
+        wordCount: content.trim().split(/\s+/).filter(Boolean).length,
+        issuesCount: currentEvaluation.findings.length,
+        confidenceScore: currentEvaluation.score,
+        summary: currentEvaluation.summaryText,
+        originalDraft: originalDraftText,
+        currentDraft: content,
+        findings: currentEvaluation.findings,
+        firstPassFindings: initialFindings,
+        firstPassIssuesCount: initialIssuesCount,
+        firstPassScore: initialScore,
+        rulesCheckedCount: currentEvaluation.checkedRulesCount,
+        imageAsset,
+        visualFindings: visualFindings.length > 0 ? visualFindings : undefined,
+        visualAnalysisStatus: visualStatus,
+        visualAnalysisError: visualError || undefined,
+        visualProvider,
+        visualModel,
+        revisions:
+          content !== originalDraftText
+            ? [
+                {
+                  id: `rev_${Date.now()}`,
+                  revisionNumber: 1,
+                  text: content,
+                  editedAt: new Date().toISOString(),
+                  findingsCount: currentEvaluation.findings.length,
+                  score: currentEvaluation.score
+                }
+              ]
+            : [],
+        aiSuggestions: aiSuggestions.length > 0 ? aiSuggestions : undefined,
+        aiAnalysisStatus: aiStatus,
+        aiAnalysisError: aiError || undefined,
+        decisionHistory: [
+          {
+            id: `dec_${Date.now()}`,
+            action: 'Save Draft',
+            reviewerName: currentUser.name,
+            reviewerComment: currentEvaluation.isCompliant
+              ? 'Deterministic check passed (0 rule violations). Awaiting human review sign-off.'
+              : `Flagged ${currentEvaluation.findings.length} rule violation(s) requiring human editorial review.`,
+            timestamp: new Date().toISOString(),
+            previousStatus: 'Draft',
+            newStatus: initialStatus
+          }
+        ]
+      });
+
+      if (saved) {
+        setSavedReviewId(targetReviewId);
+        setSavedToHistory(true);
+      }
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -771,6 +808,28 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
                   }}
                 >
                   Load Compliant Sample
+                </button>
+                <button
+                  type="button"
+                  id="load-sample-multimodal-btn"
+                  onClick={() => handleLoadSampleWithCreative('unverified')}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '4px 10px',
+                    borderRadius: '4px',
+                    background: 'rgba(56, 189, 248, 0.1)',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    color: '#38BDF8',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                  title="Loads sample marketing draft and generates in-memory brand creative asset for multimodal audit"
+                >
+                  <Sparkles size={11} />
+                  <span>Draft + Creative Logo</span>
                 </button>
                 {content && (
                   <button
@@ -1902,12 +1961,39 @@ export const ReviewTab: React.FC<ReviewTabProps> = ({ onNavigateTab }) => {
                   variant="primary"
                   size="sm"
                   onClick={handleSaveToPastReviews}
-                  iconLeft={savedToHistory ? <Check size={14} /> : (can('approve_review') ? <Save size={14} /> : <Send size={14} />)}
+                  disabled={isSubmittingReview}
+                  iconLeft={
+                    isSubmittingReview ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : savedToHistory ? (
+                      <Check size={14} />
+                    ) : can('approve_review') ? (
+                      <Save size={14} />
+                    ) : (
+                      <Send size={14} />
+                    )
+                  }
                 >
-                  {savedToHistory
+                  {isSubmittingReview
+                    ? 'Saving Review...'
+                    : savedToHistory
                     ? 'Saved to Past Reviews'
-                    : (can('approve_review') ? 'Save Review to Past Reviews' : 'Submit Draft for Review')}
+                    : can('approve_review')
+                    ? 'Save Review to Past Reviews'
+                    : 'Submit Draft for Review'}
                 </Button>
+
+                {savedToHistory && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onNavigateTab?.('history')}
+                    iconRight={<ArrowRight size={14} />}
+                    style={{ borderColor: 'var(--accent-lime-border)', color: 'var(--accent-lime)' }}
+                  >
+                    View in Past Reviews
+                  </Button>
+                )}
 
                 <Button
                   variant="secondary"

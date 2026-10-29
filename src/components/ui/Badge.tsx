@@ -17,6 +17,8 @@ export const Badge: React.FC<BadgeProps> = ({ status, size = 'md' }) => {
         return 'badge-in-review';
       case 'Approved':
         return 'badge-approved';
+      case 'Published':
+        return 'badge-published';
       case 'Rejected':
         return 'badge-rejected';
       case 'Draft':

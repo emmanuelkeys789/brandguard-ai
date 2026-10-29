@@ -8,9 +8,10 @@ import {
 } from '../services/brandRepository';
 import { BrandContext, type ToastMessage } from './brandContextDef';
 import { useAuth } from './useAuth';
+import { canUserExecuteTransition } from '../services/reviewTransitions';
 
 export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { currentUser, can } = useAuth();
+  const { currentUser, currentRole, can } = useAuth();
 
   // Read stored data directly on startup without auto-inserting fake seeds
 
@@ -86,6 +87,13 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           if (cloudReviews && cloudReviews.length > 0) setReviews(cloudReviews);
         } catch (err) {
           console.warn('Initial cloud rehydration error:', err);
+          if (isMounted) {
+            setDbState((prev) => ({
+              ...prev,
+              hasSyncFailure: true,
+              errorMessage: err instanceof Error ? err.message : 'Initial cloud rehydration failed'
+            }));
+          }
         } finally {
           if (isMounted) setIsLoading(false);
         }
@@ -128,12 +136,23 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       const result = await brandRepository.syncLocalDataToDatabase();
       if (result.success) {
+        setDbState((prev) => ({
+          ...prev,
+          hasSyncFailure: false,
+          errorMessage: undefined,
+          lastSyncAt: new Date().toISOString()
+        }));
         showToast(
           'success',
           'Cloud Sync Complete',
-          `Synced ${result.profilesCount} profile, ${result.rulesCount} rules, and ${result.reviewsCount} reviews to PostgreSQL.`
+          `Synced ${result.profilesCount} profile, ${result.rulesCount} rules, and ${result.reviewsCount} user reviews to PostgreSQL (demo samples excluded).`
         );
       } else {
+        setDbState((prev) => ({
+          ...prev,
+          hasSyncFailure: true,
+          errorMessage: result.errors[0] || 'Sync issues detected'
+        }));
         showToast(
           'error',
           'Sync Issues Detected',
@@ -143,6 +162,11 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return result;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown sync failure';
+      setDbState((prev) => ({
+        ...prev,
+        hasSyncFailure: true,
+        errorMessage: errorMsg
+      }));
       showToast('error', 'Sync Failed', errorMsg);
       return {
         success: false,
@@ -172,7 +196,18 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (brandRepository.isCloudConfigured()) {
           brandRepository.saveProfile(data).then((cloudRes) => {
             if (!cloudRes.success) {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: true,
+                errorMessage: cloudRes.error || 'Failed to sync profile to Cloud Database.'
+              }));
               showToast('error', 'Cloud Save Warning', cloudRes.error || 'Failed to sync profile to Cloud Database.');
+            } else {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: false,
+                lastSyncAt: new Date().toISOString()
+              }));
             }
           });
         }
@@ -199,7 +234,18 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (brandRepository.isCloudConfigured()) {
         brandRepository.deleteProfile().then((cloudRes) => {
           if (!cloudRes.success) {
+            setDbState((prev) => ({
+              ...prev,
+              hasSyncFailure: true,
+              errorMessage: cloudRes.error || 'Failed to delete profile from Cloud Database.'
+            }));
             showToast('error', 'Cloud Delete Warning', cloudRes.error);
+          } else {
+            setDbState((prev) => ({
+              ...prev,
+              hasSyncFailure: false,
+              lastSyncAt: new Date().toISOString()
+            }));
           }
         });
       }
@@ -232,7 +278,18 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (brandRepository.isCloudConfigured()) {
           brandRepository.saveRule(data).then((cloudRes) => {
             if (!cloudRes.success) {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: true,
+                errorMessage: cloudRes.error || 'Failed to sync rule to Cloud Database.'
+              }));
               showToast('error', 'Cloud Save Warning', cloudRes.error || 'Failed to sync rule to Cloud Database.');
+            } else {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: false,
+                lastSyncAt: new Date().toISOString()
+              }));
             }
           });
         }
@@ -263,7 +320,18 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (brandRepository.isCloudConfigured()) {
           brandRepository.deleteRule(id).then((cloudRes) => {
             if (!cloudRes.success) {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: true,
+                errorMessage: cloudRes.error || 'Failed to delete rule from Cloud Database.'
+              }));
               showToast('error', 'Cloud Delete Warning', cloudRes.error);
+            } else {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: false,
+                lastSyncAt: new Date().toISOString()
+              }));
             }
           });
         }
@@ -295,7 +363,18 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (brandRepository.isCloudConfigured()) {
           brandRepository.toggleRuleEnabled(id).then((cloudRes) => {
             if (!cloudRes.success) {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: true,
+                errorMessage: cloudRes.error || 'Failed to update rule in Cloud Database.'
+              }));
               showToast('error', 'Cloud Toggle Warning', cloudRes.error);
+            } else {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: false,
+                lastSyncAt: new Date().toISOString()
+              }));
             }
           });
         }
@@ -310,9 +389,26 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const saveReview = useCallback(
     (data: Omit<ReviewItem, 'id' | 'updatedAt'> & { id?: string; updatedAt?: string }): boolean => {
-      const isApprovalOrRejection = data.status === 'Approved' || data.status === 'Rejected';
-      if (isApprovalOrRejection && !can('approve_review')) {
-        showToast('error', 'Permission Denied', 'Reviewer or Admin authorization is required to approve or reject reviews.');
+      // 1. Enforce strict role permissions across all review actions
+      if ((data.status === 'Approved' || data.status === 'Rejected') && !can('approve_review')) {
+        showToast('error', 'Permission Denied', 'Editor role cannot approve or reject reviews. Reviewer or Admin authorization is required.');
+        return false;
+      }
+      if (data.status === 'Changes Requested' && !can('request_changes')) {
+        showToast('error', 'Permission Denied', 'Editor role cannot request changes on reviews. Reviewer or Admin authorization is required.');
+        return false;
+      }
+      if (data.status === 'Published' && !can('publish_review')) {
+        showToast('error', 'Permission Denied', 'Editor role cannot publish reviews. Reviewer or Admin authorization is required.');
+        return false;
+      }
+
+      // 2. Validate review workflow state transition
+      const existingReviews = brandStorage.getStoredReviews();
+      const existing = data.id ? existingReviews.find((r) => r.id === data.id) : undefined;
+      const transitionCheck = canUserExecuteTransition(currentRole, existing?.status, data.status);
+      if (!transitionCheck.allowed) {
+        showToast('error', 'Workflow Restriction', transitionCheck.reason || 'Invalid review workflow transition.');
         return false;
       }
 
@@ -330,7 +426,18 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (brandRepository.isCloudConfigured()) {
           brandRepository.saveReview(reviewToSave).then((cloudRes) => {
             if (!cloudRes.success) {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: true,
+                errorMessage: cloudRes.error || 'Failed to sync review to Cloud Database.'
+              }));
               showToast('error', 'Cloud Save Warning', cloudRes.error || 'Failed to sync review to Cloud Database.');
+            } else {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: false,
+                lastSyncAt: new Date().toISOString()
+              }));
             }
           });
         }
@@ -340,7 +447,7 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return false;
       }
     },
-    [can, currentUser.name, showToast]
+    [can, currentRole, currentUser.name, showToast]
   );
 
   const deleteReview = useCallback(
@@ -358,7 +465,18 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (brandRepository.isCloudConfigured()) {
           brandRepository.deleteReview(id).then((cloudRes) => {
             if (!cloudRes.success) {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: true,
+                errorMessage: cloudRes.error || 'Failed to delete review from Cloud Database.'
+              }));
               showToast('error', 'Cloud Delete Warning', cloudRes.error);
+            } else {
+              setDbState((prev) => ({
+                ...prev,
+                hasSyncFailure: false,
+                lastSyncAt: new Date().toISOString()
+              }));
             }
           });
         }

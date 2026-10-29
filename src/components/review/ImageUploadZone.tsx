@@ -3,9 +3,10 @@ import {
   UploadCloud,
   Image as ImageIcon,
   X,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
-import { validateImageFile } from '../../services/multimodalReview';
+import { validateImageFile, generateSampleCreativeFile } from '../../services/multimodalReview';
 
 interface ImageUploadZoneProps {
   onFileSelect: (file: File) => void;
@@ -41,6 +42,23 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
 
     setErrorMessage(null);
     onFileSelect(file);
+  };
+
+  const handleLoadSampleCreative = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (disabled) return;
+
+    try {
+      const sampleFile = await generateSampleCreativeFile();
+      if (sampleFile) {
+        handleFileChange(sampleFile);
+        if (!altText) {
+          onAltTextChange('BrandGuard AI shield logo and enterprise compliance banner on dark slate canvas');
+        }
+      }
+    } catch {
+      // Fallback if canvas is unavailable
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -132,8 +150,31 @@ export const ImageUploadZone: React.FC<ImageUploadZoneProps> = ({
             Drag and drop or <span style={{ color: 'var(--accent-lime)', textDecoration: 'underline' }}>browse</span>
           </div>
 
-          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
             Accepts PNG, JPEG, and WEBP creatives (Maximum file size: 4 MB)
+          </div>
+
+          <div>
+            <button
+              type="button"
+              onClick={handleLoadSampleCreative}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: 'var(--radius-xs)',
+                background: 'rgba(214, 255, 112, 0.08)',
+                border: '1px solid var(--accent-lime-border)',
+                color: 'var(--accent-lime)',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <Sparkles size={12} />
+              <span>Load Sample Creative Asset</span>
+            </button>
           </div>
         </div>
       ) : (

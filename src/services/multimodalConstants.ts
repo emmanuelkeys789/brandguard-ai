@@ -102,6 +102,38 @@ export function evaluateAuthorAltText(altText?: string): {
     };
   }
 
+  const GENERIC_PLACEHOLDER_ALT_TERMS = [
+    'image',
+    'photo',
+    'picture',
+    'pic',
+    'logo',
+    'graphic',
+    'banner',
+    'thumbnail',
+    'asset'
+  ];
+
+  if (GENERIC_PLACEHOLDER_ALT_TERMS.includes(trimmed.toLowerCase())) {
+    return {
+      hasAltText: true,
+      trimmedAltText: trimmed,
+      missingAltTextFinding: {
+        id: `vis_alt_vague_${Date.now()}`,
+        category: 'Accessibility & Contrast',
+        severity: 'Low',
+        title: 'Vague or Non-Descriptive Alt Text',
+        description: `Author provided generic placeholder "${trimmed}". Screen readers require descriptive alt text explaining the content or function of the asset rather than repeating generic labels like "${trimmed}".`,
+        observableEvidence: `Alt-text field contains generic label "${trimmed}" without subject or context details.`,
+        isUncertain: false,
+        confidence: 'High',
+        suggestedRemedy: 'Provide descriptive alt text detailing the emblem, typography, or subject matter shown in the creative asset.',
+        hasVerifiedPolicyEvidence: false,
+        citationLabel: 'Accessibility Guideline (Descriptive Alt Text Requirements)'
+      }
+    };
+  }
+
   return {
     hasAltText: true,
     trimmedAltText: trimmed

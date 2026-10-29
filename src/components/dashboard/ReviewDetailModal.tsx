@@ -17,7 +17,12 @@ import {
   RefreshCw,
   Loader2,
   ShieldCheck,
-  Eye
+  Eye,
+  Send,
+  Globe,
+  ChevronDown,
+  ChevronUp,
+  Code
 } from 'lucide-react';
 import type {
   ReviewItem,
@@ -27,7 +32,8 @@ import type {
   SeverityLevel,
   ReviewDecisionRecord,
   AiToneSuggestion,
-  AiAnalysisStatus
+  AiAnalysisStatus,
+  PublishingRecord
 } from '../../types';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -41,6 +47,9 @@ import { aiToneService, applyTextReplacement } from '../../services/aiToneServic
 import { isSummaryText, deduplicateDecisionHistory } from '../../services/brandStorage';
 import { useAuth } from '../../context/useAuth';
 import { VisualFindingsCard } from '../review/VisualFindingsCard';
+import { publishingService } from '../../services/publishingService';
+import { isValidReviewStateTransition } from '../../services/reviewTransitions';
+import { brandRepository } from '../../services/brandRepository';
 
 interface ReviewDetailModalProps {
   review: ReviewItem;
@@ -132,6 +141,11 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
   // Track if reviewer has re-run the engine on modified draft during this modal session
   const [hasRerunCheck, setHasRerunCheck] = useState<boolean>(false);
   const [isSubmittingDecision, setIsSubmittingDecision] = useState<boolean>(false);
+
+  // Publishing Integration State
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [showPayloadPreview, setShowPayloadPreview] = useState<boolean>(false);
 
   // Track whether the draft in editor has been edited compared to base draft
   const baseSavedDraft =
@@ -348,11 +362,19 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
     if (isSubmittingDecision) return;
 
     // RBAC check: only Reviewer or Admin can approve, reject, or request changes
-    if (
-      (actionName === 'Approve' || actionName === 'Reject' || actionName === 'Request Changes') &&
-      !can('approve_review')
-    ) {
-      showToast('error', 'Permission Denied', 'Reviewer or Admin authorization is required to execute approval decisions.');
+    if ((actionName === 'Approve' || actionName === 'Reject') && !can('approve_review')) {
+      showToast('error', 'Permission Denied', 'Editor role cannot approve or reject reviews. Reviewer or Admin authorization is required.');
+      return;
+    }
+    if (actionName === 'Request Changes' && !can('request_changes')) {
+      showToast('error', 'Permission Denied', 'Editor role cannot request changes on reviews. Reviewer or Admin authorization is required.');
+      return;
+    }
+
+    // Workflow state transition validation
+    const transitionCheck = isValidReviewStateTransition(review.status, targetStatus);
+    if (!transitionCheck.valid) {
+      showToast('error', 'Workflow Restriction', transitionCheck.reason || 'Invalid review workflow transition.');
       return;
     }
 
@@ -435,6 +457,130 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
     setTimeout(() => {
       setIsSubmittingDecision(false);
     }, 400);
+  };
+
+  // Handle Dispatching Review to /api/publish
+  const handlePublishReview = async () => {
+    if (isPublishing) return;
+    if (!can('publish_review')) {
+      showToast('error', 'Permission Denied', 'Editor role cannot publish reviews. Reviewer or Admin authorization is required.');
+      return;
+    }
+    if (review.status === 'Published') {
+      showToast('info', 'Already Published', 'This review has already been published. Repeated publishing is prevented to protect downstream systems from duplicate dispatches.');
+      return;
+    }
+    if (review.status !== 'Approved') {
+      showToast('error', 'Cannot Publish Unapproved Content', `Review status is currently "${review.status}". Explicit human approval ("Approved") is strictly required prior to publication.`);
+      return;
+    }
+    setIsPublishing(true);
+    setPublishError(null);
+
+    try {
+      const result = await publishingService.requestPublishReview({
+        reviewId: review.id,
+        review,
+        userRole: currentUser.role,
+        userId: currentUser.id
+      });
+
+      if (result.status === 'published' && result.record) {
+        const now = new Date().toISOString();
+        const publishDecisionRecord: ReviewDecisionRecord = {
+          id: `dec_${Date.now()}_pub`,
+          action: 'Publish',
+          reviewerName: currentUser.name,
+          reviewerComment: reviewerComment.trim() || 'Published via automated webhook integration',
+          timestamp: now,
+          previousStatus: review.status,
+          newStatus: 'Published'
+        };
+
+        const updatedReview: ReviewItem = {
+          ...review,
+          status: 'Published',
+          publishingStatus: 'published',
+          publishingRecord: result.record,
+          decisionHistory: deduplicateDecisionHistory([
+            publishDecisionRecord,
+            ...(Array.isArray(review.decisionHistory) ? review.decisionHistory : [])
+          ]),
+          updatedAt: 'Just now'
+        };
+
+        onUpdateReview(updatedReview);
+        showToast('success', 'Published via Webhook', 'Content dispatched to publishing destination.');
+      } else {
+        const errMsg =
+          result.error ||
+          (result.status === 'unconfigured'
+            ? 'Publishing webhook is unconfigured on the server.'
+            : 'Publishing failed.');
+        setPublishError(errMsg);
+        showToast('error', 'Publishing Failed', errMsg);
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || 'Unexpected error communicating with publishing endpoint.';
+      setPublishError(errMsg);
+      showToast('error', 'Publishing Error', errMsg);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  // Handle Simulating Demo Webhook Delivery (Offline / Demo Persona mode)
+  const handleSimulateDemoPublish = () => {
+    if (!can('publish_review')) {
+      showToast('error', 'Permission Denied', 'Editor role cannot publish reviews. Reviewer or Admin authorization is required.');
+      return;
+    }
+    if (review.status === 'Published') {
+      showToast('info', 'Already Published', 'This review has already been published. Repeated publishing is prevented to protect downstream systems from duplicate dispatches.');
+      return;
+    }
+    if (review.status !== 'Approved') {
+      showToast('error', 'Cannot Publish Unapproved Content', `Review status is currently "${review.status}". Explicit human approval ("Approved") is strictly required prior to publication.`);
+      return;
+    }
+    const now = new Date().toISOString();
+    const demoRecord: PublishingRecord = {
+      idempotencyKey: `pub_demo_${review.id}_${Date.now().toString(36)}`,
+      destinationUrl: 'simulation://local-demo-publishing',
+      destinationName: 'Offline Demo Simulation',
+      status: 'published',
+      publishedAt: now,
+      lastAttemptAt: now,
+      attemptCount: 1,
+      statusCode: 200,
+      externalReference: `sim_ack_${Math.random().toString(36).substring(2, 8)}`,
+      isSimulated: true
+    };
+
+    const publishDecisionRecord: ReviewDecisionRecord = {
+      id: `dec_${Date.now()}_pub_demo`,
+      action: 'Publish',
+      reviewerName: currentUser.name,
+      reviewerComment: reviewerComment.trim() || 'Published via offline demo simulation',
+      timestamp: now,
+      previousStatus: review.status,
+      newStatus: 'Published'
+    };
+
+    const updatedReview: ReviewItem = {
+      ...review,
+      status: 'Published',
+      publishingStatus: 'published',
+      publishingRecord: demoRecord,
+      decisionHistory: deduplicateDecisionHistory([
+        publishDecisionRecord,
+        ...(Array.isArray(review.decisionHistory) ? review.decisionHistory : [])
+      ]),
+      updatedAt: 'Just now'
+    };
+
+    onUpdateReview(updatedReview);
+    showToast('info', 'Demo Webhook Simulated', 'Offline demo delivery recorded (simulated locally).');
   };
 
   const getSeverityStyle = (severity: SeverityLevel) => {
@@ -926,7 +1072,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                   }}
                 >
                   <Lock size={12} />
-                  <span>Immutable submitted snapshot preserved for legal audit compliance</span>
+                  <span>Submitted draft snapshot preserved for audit tracking and editorial comparison</span>
                 </div>
                 <div
                   style={{
@@ -1846,6 +1992,457 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
             )}
           </div>
 
+          {/* Gated Notice for Pending Review Statuses */}
+          {review.status !== 'Approved' && review.status !== 'Published' && (
+            <div
+              className="glass-panel"
+              style={{
+                marginTop: '16px',
+                padding: '14px 18px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}
+            >
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <Lock size={15} color="var(--text-tertiary)" />
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                <strong style={{ color: 'var(--text-primary)' }}>Publishing Gated:</strong> Direct publishing webhook dispatcher requires explicit human sign-off (status &ldquo;Approved&rdquo;). Once approved by an authorized Reviewer or Admin, signed publishing and offline simulation unlock here automatically.
+              </div>
+            </div>
+          )}
+
+          {/* Section: Enterprise Direct Publishing & Workflow Webhooks */}
+          {(review.status === 'Approved' || review.status === 'Published') && (
+            <div
+              className="glass-panel"
+              style={{
+                marginTop: '16px',
+                padding: '20px',
+                borderRadius: 'var(--radius-md)',
+                background:
+                  review.status === 'Published'
+                    ? 'rgba(6, 182, 212, 0.05)'
+                    : 'rgba(214, 255, 112, 0.04)',
+                border:
+                  review.status === 'Published'
+                    ? '1px solid rgba(6, 182, 212, 0.3)'
+                    : '1px solid var(--accent-lime-border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background:
+                        review.status === 'Published'
+                          ? 'rgba(6, 182, 212, 0.15)'
+                          : 'var(--accent-lime-dim)',
+                      border: `1px solid ${
+                        review.status === 'Published'
+                          ? 'rgba(6, 182, 212, 0.4)'
+                          : 'var(--accent-lime-border)'
+                      }`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <Globe
+                      size={16}
+                      color={review.status === 'Published' ? '#06B6D4' : 'var(--accent-lime)'}
+                    />
+                  </div>
+                  <div>
+                    <h3
+                      style={{
+                        fontSize: '15px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        margin: 0
+                      }}
+                    >
+                      {review.status === 'Published'
+                        ? review.publishingRecord?.isSimulated ||
+                          review.publishingRecord?.idempotencyKey.startsWith('pub_demo_') ||
+                          review.publishingRecord?.destinationUrl.startsWith('simulation://') ||
+                          review.publishingRecord?.destinationName?.includes('Demo') ||
+                          review.publishingRecord?.destinationName?.includes('Simulation')
+                          ? 'Content Published (Offline Demo Simulation)'
+                          : 'Content Published via Enterprise Webhook'
+                        : 'Direct Publishing & Workflow Webhook'}
+                    </h3>
+                    <div
+                      style={{
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)',
+                        marginTop: '2px'
+                      }}
+                    >
+                      {review.status === 'Published'
+                        ? review.publishingRecord?.isSimulated ||
+                          review.publishingRecord?.idempotencyKey.startsWith('pub_demo_') ||
+                          review.publishingRecord?.destinationUrl.startsWith('simulation://') ||
+                          review.publishingRecord?.destinationName?.includes('Demo') ||
+                          review.publishingRecord?.destinationName?.includes('Simulation')
+                          ? 'Simulated in-browser demonstration. No external webhook was contacted.'
+                          : 'Authoritative server dispatch confirmed with downstream destination.'
+                        : 'Human approval recorded. Content is eligible for downstream publishing dispatch.'}
+                    </div>
+                  </div>
+                </div>
+
+                <Badge status={review.status} size="sm" />
+              </div>
+
+              {review.status === 'Published' && review.publishingRecord && (() => {
+                const isSimulated = Boolean(
+                  review.publishingRecord.isSimulated ||
+                  review.publishingRecord.idempotencyKey.startsWith('pub_demo_') ||
+                  review.publishingRecord.destinationUrl.startsWith('simulation://') ||
+                  review.publishingRecord.destinationName?.includes('Demo') ||
+                  review.publishingRecord.destinationName?.includes('Simulation')
+                );
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '3px 8px',
+                          borderRadius: 'var(--radius-xs)',
+                          background: isSimulated ? 'rgba(251, 191, 36, 0.12)' : 'rgba(52, 211, 153, 0.12)',
+                          border: '1px solid',
+                          borderColor: isSimulated ? 'rgba(251, 191, 36, 0.35)' : 'rgba(52, 211, 153, 0.35)',
+                          color: isSimulated ? 'var(--accent-amber)' : '#34D399',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          letterSpacing: '0.03em'
+                        }}
+                      >
+                        {isSimulated ? 'SIMULATED DEMO DELIVERY' : 'VERIFIED EXTERNAL DISPATCH (HTTP 200)'}
+                      </div>
+
+                      {isSimulated && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                          Simulated offline demonstration record
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                        gap: '10px',
+                        padding: '12px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div>
+                        <span
+                          style={{
+                            color: 'var(--text-tertiary)',
+                            display: 'block',
+                            fontSize: '10px',
+                            fontWeight: 600
+                          }}
+                        >
+                          DESTINATION
+                        </span>
+                        <strong style={{ color: 'var(--text-primary)' }}>
+                          {review.publishingRecord.destinationName || (isSimulated ? 'Offline Demo Simulation' : 'Enterprise Webhook')}
+                        </strong>
+                      </div>
+                      <div>
+                        <span
+                          style={{
+                            color: 'var(--text-tertiary)',
+                            display: 'block',
+                            fontSize: '10px',
+                            fontWeight: 600
+                          }}
+                        >
+                          IDEMPOTENCY KEY
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                          {review.publishingRecord.idempotencyKey}
+                        </span>
+                      </div>
+                      <div>
+                        <span
+                          style={{
+                            color: 'var(--text-tertiary)',
+                            display: 'block',
+                            fontSize: '10px',
+                            fontWeight: 600
+                          }}
+                        >
+                          PUBLISHED AT
+                        </span>
+                        <span style={{ color: 'var(--accent-lime)' }}>
+                          {review.publishingRecord.publishedAt
+                            ? new Date(review.publishingRecord.publishedAt).toLocaleString([], {
+                                dateStyle: 'short',
+                                timeStyle: 'short'
+                              })
+                            : 'Just now'}
+                        </span>
+                      </div>
+                      {review.publishingRecord.externalReference && (
+                        <div>
+                          <span
+                            style={{
+                              color: 'var(--text-tertiary)',
+                              display: 'block',
+                              fontSize: '10px',
+                              fontWeight: 600
+                            }}
+                          >
+                            EXTERNAL REFERENCE
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-mono)', color: '#38BDF8' }}>
+                            {review.publishingRecord.externalReference}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {isSimulated && (
+                      <div style={{ fontSize: '11px', color: 'var(--accent-amber)', opacity: 0.9, lineHeight: 1.4 }}>
+                        Notice: This record represents a local demo publishing simulation. To dispatch real publishing payloads to your CMS or marketing endpoints, configure PUBLISHING_WEBHOOK_URL on your server.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {review.status === 'Approved' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    Dispatches a signed, idempotent HTTP POST request containing the approved copy,
+                    compliance score, and audit metadata to the configured enterprise publishing endpoint (
+                    <code>POST /api/publish</code>).
+                  </div>
+
+                  {publishError && (
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(248, 113, 113, 0.1)',
+                        border: '1px solid rgba(248, 113, 113, 0.3)',
+                        color: '#FCA5A5',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '8px'
+                      }}
+                    >
+                      <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                      <div>
+                        <strong>Endpoint Response:</strong> {publishError}
+                        <div
+                          style={{
+                            marginTop: '4px',
+                            fontSize: '11px',
+                            color: 'var(--text-tertiary)'
+                          }}
+                        >
+                          Server-side webhook delivery requires <code>PUBLISHING_WEBHOOK_URL</code> and a
+                          live Supabase Auth token. For demo evaluation, use the offline demo simulation below.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+                    {can('publish_review') ? (
+                      <>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handlePublishReview}
+                          disabled={isPublishing}
+                          iconLeft={
+                            isPublishing ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Send size={13} />
+                            )
+                          }
+                          id="dispatch-webhook-btn"
+                        >
+                          {isPublishing
+                            ? 'Dispatching Webhook...'
+                            : 'Publish via Webhook (POST /api/publish)'}
+                        </Button>
+
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleSimulateDemoPublish}
+                          disabled={isPublishing}
+                          iconLeft={<CheckCircle2 size={13} />}
+                          id="simulate-publish-btn"
+                          style={{ borderColor: 'rgba(6, 182, 212, 0.4)', color: '#06B6D4' }}
+                        >
+                          Simulate Webhook Delivery (Offline Demo)
+                        </Button>
+                      </>
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          color: '#FBBF24',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Lock size={12} />
+                        <span>Publishing authorization requires Admin or Reviewer role.</span>
+                      </div>
+                    )}
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowPayloadPreview(!showPayloadPreview)}
+                      iconLeft={<Code size={13} />}
+                      iconRight={showPayloadPreview ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    >
+                      {showPayloadPreview
+                        ? 'Hide Payload & Signature'
+                        : 'Inspect Webhook Payload & Signature'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Expandable Webhook Payload & Signature Drawer */}
+              {showPayloadPreview && (
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(0, 0, 0, 0.45)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-tertiary)',
+                        fontFamily: 'var(--font-mono)'
+                      }}
+                    >
+                      REQUEST HEADERS &amp; PAYLOAD SPECIFICATION
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        color: 'var(--accent-lime)',
+                        fontFamily: 'var(--font-mono)'
+                      }}
+                    >
+                      HMAC-SHA256 SIGNED
+                    </span>
+                  </div>
+
+                  <pre
+                    style={{
+                      margin: 0,
+                      padding: '10px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'rgba(10, 13, 20, 0.85)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                      color: '#A7F3D0',
+                      overflowX: 'auto',
+                      lineHeight: 1.45
+                    }}
+                  >
+{`// Security Headers
+Content-Type: application/json
+User-Agent: BrandGuard-AI-Publishing/1.0
+X-BrandGuard-Idempotency-Key: pub_${review.id}_${review.decisionAt ? 'hash' : 'v1'}
+X-BrandGuard-Review-Id: ${review.id}
+X-BrandGuard-Signature: sha256=<HMAC-SHA256 signature calculated on server via PUBLISHING_WEBHOOK_SECRET>
+// Secret Protection: Webhook signing secret is maintained strictly on the server and never exposed to the client.
+
+// Authoritative Webhook Payload (POST /api/publish)
+${JSON.stringify(
+  {
+    idempotencyKey: `pub_${review.id}_${review.decisionAt ? 'hash' : 'v1'}`,
+    reviewId: review.id,
+    title: review.title,
+    channel: review.channel,
+    content: (review.currentDraft || review.originalDraft || '').slice(0, 80) + '...',
+    author: review.author,
+    approvedBy: review.reviewedBy || currentUser.name,
+    approvedAt: review.decisionAt || review.updatedAt || 'approval_v1',
+    complianceScore: review.confidenceScore,
+    hasImageAsset: Boolean(review.imageAsset),
+    timestamp: review.decisionAt || review.updatedAt || 'timestamp_v1'
+  },
+  null,
+  2
+)}`}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Decision History & Audit Trail */}
           {review.decisionHistory && review.decisionHistory.length > 0 && (
             <div
@@ -1855,47 +2452,110 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 borderTop: '1px solid var(--border-subtle)'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-                <History size={14} color="var(--accent-lime)" />
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                  Audit Trail &amp; Decision History ({review.decisionHistory.length})
-                </h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <History size={14} color="var(--accent-lime)" />
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                    Audit Trail &amp; Decision History ({review.decisionHistory.length})
+                  </h4>
+                </div>
+
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: brandRepository.isCloudConfigured() ? '#34D399' : 'var(--accent-amber)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Info size={12} />
+                  {brandRepository.isCloudConfigured() ? 'Cloud Database Backed' : 'Local Browser Mode (Demo)'}
+                </span>
+              </div>
+
+              {/* Honest storage transparency disclosure */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-subtle)',
+                  marginBottom: '10px',
+                  fontSize: '11px',
+                  color: 'var(--text-tertiary)',
+                  lineHeight: 1.45
+                }}
+              >
+                <Info size={13} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--text-secondary)' }} />
+                <div>
+                  <strong style={{ color: 'var(--text-secondary)' }}>Storage Integrity Disclosure: </strong>
+                  {review.isSample || !brandRepository.isCloudConfigured() ? (
+                    <span>
+                      Audit entries are stored in browser LocalStorage. Client-side storage cannot guarantee append-only ledger immutability; production enterprise audit compliance requires Cloud PostgreSQL backing with Row-Level Security (RLS).
+                    </span>
+                  ) : (
+                    <span>
+                      Audit entries are synchronized with Supabase Cloud PostgreSQL. Server-backed persistence tracks authorized review decisions, timestamps, and reviewer identities.
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {review.decisionHistory.map((rec) => (
-                  <div
-                    key={rec.id}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      border: '1px solid var(--border-subtle)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px',
-                      fontSize: '12px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ color: 'var(--text-primary)' }}>{rec.action}</strong>
-                        <span style={{ color: 'var(--text-tertiary)' }}>by {rec.reviewerName}</span>
-                        <span style={{ color: 'var(--text-tertiary)' }}>
-                          ({rec.previousStatus} → <span style={{ color: 'var(--accent-lime)' }}>{rec.newStatus}</span>)
+                {review.decisionHistory.map((rec) => {
+                  const isLocalDemo = review.isSample || rec.id.includes('demo') || !brandRepository.isCloudConfigured();
+                  return (
+                    <div
+                      key={rec.id}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <strong style={{ color: 'var(--text-primary)' }}>{rec.action}</strong>
+                          <span style={{ color: 'var(--text-tertiary)' }}>by {rec.reviewerName}</span>
+                          <span style={{ color: 'var(--text-tertiary)' }}>
+                            ({rec.previousStatus} → <span style={{ color: 'var(--accent-lime)' }}>{rec.newStatus}</span>)
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              background: isLocalDemo ? 'rgba(251, 191, 36, 0.1)' : 'rgba(52, 211, 153, 0.1)',
+                              border: isLocalDemo ? '1px solid rgba(251, 191, 36, 0.25)' : '1px solid rgba(52, 211, 153, 0.25)',
+                              color: isLocalDemo ? '#FBBF24' : '#34D399',
+                              letterSpacing: '0.03em'
+                            }}
+                          >
+                            {isLocalDemo ? 'LOCAL DEMO RECORD' : 'CLOUD RECORD'}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>
+                          {new Date(rec.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                         </span>
                       </div>
-                      <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>
-                        {new Date(rec.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                      </span>
+                      {rec.reviewerComment && (
+                        <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '2px' }}>
+                          &quot;{rec.reviewerComment}&quot;
+                        </div>
+                      )}
                     </div>
-                    {rec.reviewerComment && (
-                      <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '2px' }}>
-                        &quot;{rec.reviewerComment}&quot;
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

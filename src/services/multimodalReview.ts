@@ -183,6 +183,82 @@ export async function generateThumbnail(file: File, maxDim = 140): Promise<strin
   });
 }
 
+/**
+ * Generates an in-memory sample marketing creative asset (PNG) with the BrandGuard AI logo
+ * and typography for judge evaluation with zero external dependencies.
+ */
+export function generateSampleCreativeFile(): Promise<File | null> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 600;
+      canvas.height = 315;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.fillStyle = '#0B0F19';
+      ctx.fillRect(0, 0, 600, 315);
+
+      ctx.strokeStyle = 'rgba(214, 255, 112, 0.25)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(12, 12, 576, 291);
+
+      // Logo Shield Icon Simulation
+      ctx.fillStyle = '#D6FF70';
+      ctx.beginPath();
+      ctx.moveTo(300, 65);
+      ctx.lineTo(340, 85);
+      ctx.lineTo(340, 135);
+      ctx.quadraticCurveTo(340, 180, 300, 200);
+      ctx.quadraticCurveTo(260, 180, 260, 135);
+      ctx.lineTo(260, 85);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#0B0F19';
+      ctx.beginPath();
+      ctx.arc(300, 130, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 22px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('BRANDGUARD AI', 300, 235);
+
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '13px system-ui, sans-serif';
+      ctx.fillText('Enterprise Compliance & Visual Governance', 300, 260);
+
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(new File([blob], 'brandguard_sample_creative.png', { type: 'image/png' }));
+          } else {
+            resolve(null);
+          }
+        }, 'image/png');
+      } else {
+        const dataUrl = canvas.toDataURL('image/png');
+        const byteString = atob(dataUrl.split(',')[1]);
+        const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        resolve(new File([ab], 'brandguard_sample_creative.png', { type: mimeString }));
+      }
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 export interface MultimodalReviewClientOptions {
   imageBase64: string;
   mimeType: string;

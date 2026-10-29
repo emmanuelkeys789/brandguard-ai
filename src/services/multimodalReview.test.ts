@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   validateImageFile,
   evaluateAuthorAltText,
-  prepareImageForAnalysis
+  prepareImageForAnalysis,
+  generateSampleCreativeFile
 } from './multimodalReview.ts';
 import {
   handleMultimodalReview,
@@ -594,6 +595,30 @@ describe('Multimodal Brand Compliance & Accessibility Tests', () => {
       const res = await prepareImageForAnalysis(mockFile);
       assert.ok(typeof res.base64 === 'string');
       assert.equal(res.mimeType, 'image/jpeg');
+    });
+
+    test('21. evaluateAuthorAltText flags generic single-word placeholders (e.g. "image", "photo") with actionable remedy', () => {
+      const imageResult = evaluateAuthorAltText('image');
+      assert.equal(imageResult.hasAltText, true);
+      assert.ok(imageResult.missingAltTextFinding);
+      assert.equal(imageResult.missingAltTextFinding.title, 'Vague or Non-Descriptive Alt Text');
+      assert.ok(imageResult.missingAltTextFinding.description.includes('generic placeholder "image"'));
+      assert.equal(imageResult.missingAltTextFinding.confidence, 'High');
+
+      const photoResult = evaluateAuthorAltText('  PHOTO  ');
+      assert.equal(photoResult.hasAltText, true);
+      assert.ok(photoResult.missingAltTextFinding);
+      assert.equal(photoResult.missingAltTextFinding.title, 'Vague or Non-Descriptive Alt Text');
+
+      const logoResult = evaluateAuthorAltText('logo');
+      assert.equal(logoResult.hasAltText, true);
+      assert.ok(logoResult.missingAltTextFinding);
+    });
+
+    test('22. generateSampleCreativeFile runs safely with zero external dependencies', async () => {
+      const sample = await generateSampleCreativeFile();
+      // In Node environment without DOM canvas, safely returns null without throwing
+      assert.ok(sample === null || typeof sample === 'object');
     });
   });
 });

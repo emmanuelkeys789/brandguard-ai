@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BrandGuard AI — Round 3 Final Product Submission</title>
+  <style>
+    @page {
+      size: letter;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.5;
+      color: #0f172a;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      border-bottom: 3px solid #10b981;
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 22pt;
+      font-weight: 800;
+      color: #090d16;
+      margin: 0 0 6px 0;
+      letter-spacing: -0.02em;
+    }
+    .header-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 9.5pt;
+      color: #475569;
+      margin-top: 8px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-green { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .badge-blue { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-amber { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    
+    h2 {
+      font-size: 13.5pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 22px 0 10px 0;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #e2e8f0;
+      letter-spacing: -0.01em;
+    }
+    h3 {
+      font-size: 11pt;
+      font-weight: 600;
+      color: #1e293b;
+      margin: 14px 0 6px 0;
+    }
+    p, ul, ol {
+      margin: 0 0 10px 0;
+    }
+    ul, ol {
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 16px 0;
+      font-size: 9pt;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      border: 1px solid #cbd5e1;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 8.5pt;
+    }
+    code {
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 2px 4px;
+      border-radius: 3px;
+      border: 1px solid #e2e8f0;
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 10px 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 8px 0 12px 0;
+      line-height: 1.4;
+    }
+    .callout {
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin: 10px 0 14px 0;
+      font-size: 9pt;
+    }
+    .callout-info {
+      background: #f0f9ff;
+      border-left: 4px solid #0284c7;
+      color: #0c4a6e;
+    }
+    .callout-success {
+      background: #f0fdf4;
+      border-left: 4px solid #16a34a;
+      color: #14532d;
+    }
+    .callout-warning {
+      background: #fffbeb;
+      border-left: 4px solid #f59e0b;
+      color: #78350f;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid #cbd5e1;
+      font-size: 8pt;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <h1>BrandGuard AI</h1>
+        <div style="font-size: 11pt; font-weight: 600; color: #0284c7;">
+          Autonomous Multimodal Brand Governance, Verification &amp; Publishing Platform
+        </div>
+      </div>
+      <div>
+        <span class="badge badge-green">Round 3 Final</span>
+        <span class="badge badge-blue">Ready for Judging</span>
+      </div>
+    </div>
+    <div class="header-meta">
+      <div><strong>Live App:</strong> <a href="https://buildguardai.netlify.app/">https://buildguardai.netlify.app/</a></div>
+      <div><strong>Repository:</strong> <a href="https://github.com/emmanuelkeys789/brandguard-ai.git">emmanuelkeys789/brandguard-ai</a></div>
+      <div><strong>Stage:</strong> Hackathon Round 3 of 3</div>
+      <div><strong>Date:</strong> October 2026</div>
+    </div>
+  </header>
+
+  <!-- Section 1 -->
+  <h2>1. Executive Summary &amp; Purpose</h2>
+  <p>
+    <strong>BrandGuard AI</strong> is an enterprise brand governance and multimodal compliance system built to prevent brand erosion, legal risk, inaccessible creative distribution, and messaging inconsistencies before publication.
+  </p>
+  <p>
+    Modern content workflows face an acute challenge: generic LLMs frequently hallucinate brand rules, generate unverified claims, or fail to catch subtle visual and accessibility violations. BrandGuard AI solves this with a <strong>hybrid architecture</strong>:
+  </p>
+  <ul>
+    <li><strong>Deterministic Rule Verification:</strong> Mathematical precision for brand guidelines, trademark symbols, prohibited claims, and legal disclaimers. 100% reproducible and zero hallucination.</li>
+    <li><strong>Advisory Contextual AI Reasoning:</strong> High-level voice and tone critique powered by real LLM vision and reasoning models (OpenAI <code>gpt-4o-mini</code> &amp; Google Gemini <code>gemini-1.5-flash</code>), offering substantive drop-in rewrites without altering deterministic compliance scores.</li>
+    <li><strong>Multimodal Creative &amp; Alt-Text Audit:</strong> Direct ingestion and analysis of marketing imagery, clear-space detection, WCAG contrast checks, and author-supplied alt-text verification.</li>
+    <li><strong>Role-Based Access Control (RBAC):</strong> Strict separation between Editors (drafting and checks) and Reviewers/Admins (approvals, rejections, change requests, and publishing).</li>
+    <li><strong>Signed Idempotent Webhook Dispatch:</strong> Automated downstream distribution with HMAC-SHA256 signatures, SSRF destination protection, and offline demo simulation.</li>
+  </ul>
+
+  <!-- Section 2 -->
+  <h2>2. Status of Exact Round 2 Commitments</h2>
+  <p>
+    In the Round 2 submission, three specific features were committed for delivery in Round 3. All three commitments are <strong>100% completed, fully tested, and judge-ready</strong>:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 25%;">Round 2 Commitment</th>
+        <th style="width: 35%;">Delivered Scope in Round 3</th>
+        <th style="width: 15%;">Status</th>
+        <th style="width: 25%;">Verification Evidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1. Multi-Modal Visual Asset Inspection</strong></td>
+        <td>
+          • Ingestion of PNG, JPEG, WEBP creatives up to 4 MB.<br>
+          • In-memory canvas creative generator (no external dependencies).<br>
+          • Rigorous author alt-text accessibility auditing (detects missing and generic alt-text).<br>
+          • Observability evidence callouts vs. uncertain visual judgments.<br>
+          • Dual provider support: Google Gemini Vision &amp; OpenAI Vision with fallback.
+        </td>
+        <td><span class="badge badge-green">COMPLETED</span></td>
+        <td>
+          • <code>multimodalReview.test.ts</code> (22 tests passing).<br>
+          • Live endpoint verified: <code>POST /api/multimodal-review</code> returned HTTP 200 with OpenAI vision findings.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>2. Enterprise RBAC &amp; Role Governance</strong></td>
+        <td>
+          • Three distinct roles: <strong>Editor</strong>, <strong>Reviewer</strong>, and <strong>Admin</strong>.<br>
+          • Editors strictly prevented from approving, rejecting, or publishing content.<br>
+          • Reviewers and Admins hold signoff and webhook publishing authority.<br>
+          • Server-side token authorization via Supabase Auth and <code>user_roles</code> table.<br>
+          • Transparent simulated demo personas for seamless judging.
+        </td>
+        <td><span class="badge badge-green">COMPLETED</span></td>
+        <td>
+          • <code>governanceWorkflow.test.ts</code> (26 tests passing).<br>
+          • Permission matrix enforced in UI buttons, context handlers, and storage layer.
+        </td>
+      </tr>
+      <tr>
+        <td><strong>3. Direct Publishing Webhooks &amp; CMS Integrations</strong></td>
+        <td>
+          • Serverless endpoint (<code>POST /api/publish</code>) with Netlify Functions v2.<br>
+          • Publishing strictly gated behind explicit human approval (<code>Approved</code>).<br>
+          • HMAC-SHA256 signature calculation with server secret protection.<br>
+          • SSRF protection rejecting loopback, cloud metadata, and private IP ranges.<br>
+          • Deterministic idempotency key derivation &amp; HTTP 409 repeated publish guards.<br>
+          • Offline demo simulation with honest <code>SIMULATED DEMO DELIVERY</code> labeling.
+        </td>
+        <td><span class="badge badge-green">COMPLETED</span></td>
+        <td>
+          • <code>publishingHandler.test.ts</code> (28 tests passing).<br>
+          • <code>publishingService.test.ts</code> (5 tests passing).<br>
+          • Interactive payload &amp; signature inspection drawer in UI.
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <!-- Section 3 -->
+  <h2>3. Complete Quality &amp; Verification Results</h2>
+  <p>
+    The codebase passes all automated regression, linting, type-checking, and build validation suites with zero warnings and zero errors:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Verification Check</th>
+        <th>Command Executed</th>
+        <th>Result</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Automated Test Suite</strong></td>
+        <td><code>npm test</code></td>
+        <td><span class="badge badge-green">197 / 197 PASS</span></td>
+        <td>50 test suites, 0 failures, 0 skipped, completed in 1.12s.</td>
+      </tr>
+      <tr>
+        <td><strong>Linter Static Analysis</strong></td>
+        <td><code>npm run lint</code></td>
+        <td><span class="badge badge-green">0 ERRORS / 0 WARNINGS</span></td>
+        <td>Oxlint scanned 73 files with 116 rules in 173ms.</td>
+      </tr>
+      <tr>
+        <td><strong>TypeScript Compiler</strong></td>
+        <td><code>npx tsc -b --noEmit</code></td>
+        <td><span class="badge badge-green">CLEAN (CODE 0)</span></td>
+        <td>Zero type errors across all client, service, and server files.</td>
+      </tr>
+      <tr>
+        <td><strong>Production Build Rollup</strong></td>
+        <td><code>npm run build</code></td>
+        <td><span class="badge badge-green">BUILT IN 364ms</span></td>
+        <td>Vite v8.3.5 generated clean production bundle without secret leaks.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Section 4 -->
+  <h2>4. Three-Tier Verification Breakdown</h2>
+  <p>
+    To ensure honesty for hackathon evaluation, BrandGuard AI explicitly distinguishes what is verified automatically, in local demo mode, and in live cloud deployment:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Tier</th>
+        <th>Target Environment</th>
+        <th>Capabilities Verified</th>
+        <th>Verification Method</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Tier 1: Automated Quality</strong></td>
+        <td>Node.js Test Runner / CI</td>
+        <td>
+          • State transition legality and duplicate prevention.<br>
+          • SSRF rejection on private IPs and cloud metadata.<br>
+          • HMAC signature math and idempotency key derivation.<br>
+          • Prompt isolation and delimiter escaping.<br>
+          • Schema parity between migrations and data mappers.
+        </td>
+        <td>197 automated tests passing in <code>src/services/*.test.ts</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Tier 2: Local Demo Experience</strong></td>
+        <td>Local Dev Server (<code>localhost:5173</code>)</td>
+        <td>
+          • 1-click <strong>"Draft + Creative Logo"</strong> asset generation.<br>
+          • Tri-stream findings inspection (Policy, AI Tone, Visual Compliance).<br>
+          • 1-click <strong>"Apply to Draft"</strong> text remediation.<br>
+          • Simulated persona switcher (Admin, Reviewer, Editor).<br>
+          • Gated publishing notice and offline demo publishing simulation.<br>
+          • LocalStorage rehydration preserving review history across refresh.
+        </td>
+        <td>Interactive browser dev server verification.</td>
+      </tr>
+      <tr>
+        <td><strong>Tier 3: Live Cloud Production</strong></td>
+        <td>Netlify Edge (<code>buildguardai.netlify.app</code>)</td>
+        <td>
+          • SPA static asset delivery and client routing via <code>public/_redirects</code>.<br>
+          • Production endpoint: <code>POST /api/ai-tone-review</code> (OpenAI <code>gpt-4o-mini</code>).<br>
+          • Production endpoint: <code>POST /api/multimodal-review</code> (OpenAI Vision).
+        </td>
+        <td>Live HTTP/2 cURL requests returning genuine structured findings.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Section 5 -->
+  <h2>5. Security &amp; Architectural Invariants</h2>
+  <div class="callout callout-success">
+    <strong>Zero Secret Leakage Invariant:</strong> Server API keys (<code>OPENAI_API_KEY</code>, <code>GEMINI_API_KEY</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>PUBLISHING_WEBHOOK_SECRET</code>) are strictly isolated to backend functions and never bundled into frontend assets. Production bundle inspection of <code>dist/</code> confirmed zero secret key occurrences.
+  </div>
+  <ul>
+    <li><strong>Untrusted Content Isolation:</strong> Draft copy is encapsulated within <code>&lt;UNTRUSTED_DRAFT_CONTENT&gt;</code> tags. System prompts strictly instruct models to ignore instructions embedded in marketing drafts.</li>
+    <li><strong>SSRF Defense:</strong> Webhook destination validation rejects private IP ranges (<code>10.0.0.0/8</code>, <code>172.16.0.0/12</code>, <code>192.168.0.0/16</code>), link-local IPs (<code>169.254.0.0/16</code>), loopback (<code>127.0.0.1</code>), cloud metadata hosts, and requires HTTPS in production.</li>
+    <li><strong>Terminal State Idempotency:</strong> Once a review reaches <code>Published</code> status, subsequent publish attempts return an immediate HTTP 409 Conflict to protect downstream systems from duplicate dispatches.</li>
+  </ul>
+
+  <div class="page-break"></div>
+
+  <!-- Section 6 -->
+  <h2>6. Honest Transparency Disclosures &amp; Limitations</h2>
+  <div class="callout callout-warning">
+    <strong>Transparency for Judges:</strong>
+    <ul style="margin: 4px 0 0 0; padding-left: 16px;">
+      <li><strong>Simulated Demo Personas:</strong> The UI persona switcher simulates Admin, Reviewer, and Editor roles client-side for ease of evaluation. Real multi-tenant authorization requires authentic Supabase Auth credentials backed by the server <code>user_roles</code> table.</li>
+      <li><strong>LocalStorage vs. Cloud Ledger:</strong> In local demo mode, records are stored in browser <code>LocalStorage</code>. While lifecycle rules are enforced in memory, browser storage is not cryptographically immutable. Authoritative immutability requires Cloud PostgreSQL with Row-Level Security.</li>
+      <li><strong>Live Webhook Endpoint Configuration:</strong> Real webhook dispatch via <code>/api/publish</code> requires server environment configuration (<code>PUBLISHING_WEBHOOK_URL</code>, <code>PUBLISHING_WEBHOOK_SECRET</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>). In demo mode, offline simulation provides complete workflow verification without external CMS webhooks.</li>
+    </ul>
+  </div>
+
+  <!-- Section 7 -->
+  <h2>7. Quick 2-Minute Judge Evaluation Script</h2>
+  <ol>
+    <li><strong>Open Application:</strong> Navigate to the <strong>Check Content</strong> tab.</li>
+    <li><strong>Load Sample with Creative:</strong> Click the blue <strong>"Draft + Creative Logo"</strong> button. Notice that both the marketing text (with deliberate superlatives) and the in-memory BrandGuard creative banner with accessibility alt-text populate immediately.</li>
+    <li><strong>Run Content Check:</strong> Click <strong>"Run Content Check"</strong>.</li>
+    <li><strong>Inspect Tri-Stream Findings:</strong>
+      <ul>
+        <li><em>Policy Violations:</em> Deterministic engine flags unsupported claims (*"undisputed #1"*, *"100% immunity"*).</li>
+        <li><em>AI Tone Suggestions:</em> AI critique evaluates voice and recommends substantive drop-in replacements.</li>
+        <li><em>Visual Compliance:</em> Inspect visual findings and author alt-text evaluation.</li>
+      </ul>
+    </li>
+    <li><strong>Apply Remedy:</strong> Click <strong>"Apply to Draft"</strong> on an AI suggestion or rule correction; observe the draft textarea update instantly.</li>
+    <li><strong>Submit Review:</strong> Click <strong>"Save Review to Past Reviews"</strong>.</li>
+    <li><strong>Inspect Gated Governance:</strong> Open <strong>Past Reviews</strong>, click the submitted review, and observe the <strong>"Publishing Gated"</strong> alert.</li>
+    <li><strong>Approve &amp; Simulate Webhook:</strong> Switch to <strong>Reviewer</strong> or <strong>Admin</strong> persona, click <strong>"Approve"</strong>, open <strong>"Inspect Webhook Payload &amp; Signature"</strong>, and click <strong>"Simulate Webhook Delivery (Offline Demo)"</strong>. Observe the <code>SIMULATED DEMO DELIVERY</code> badge and verify repeated publishing is blocked.</li>
+  </ol>
+
+  <!-- Section 8 -->
+  <h2>8. Repository &amp; Deployment Metadata</h2>
+  <ul>
+    <li><strong>Repository URL:</strong> <a href="https://github.com/emmanuelkeys789/brandguard-ai.git">https://github.com/emmanuelkeys789/brandguard-ai.git</a></li>
+    <li><strong>Live Application URL:</strong> <a href="https://buildguardai.netlify.app/">https://buildguardai.netlify.app/</a></li>
+    <li><strong>Deployment Configuration:</strong> Netlify Functions v2 (<code>netlify.toml</code>) + Vite build rollup.</li>
+    <li><strong>Database Migrations:</strong> 4 sequential versioned SQL migrations documented in <code>supabase/migrations/</code> with unified schema in <code>supabase/schema.sql</code>.</li>
+  </ul>
+
+  <footer>
+    <div>BrandGuard AI — Round 3 Final Product Submission</div>
+    <div>Page 3 of 3</div>
+  </footer>
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 import type { BrandProfile, BrandRule, ReviewItem } from '../types';
 import {
   brandStorage,
+  isSampleDemoReview,
   type StorageResult
 } from './brandStorage.ts';
 import {
@@ -15,6 +16,8 @@ export interface DatabaseConnectionState {
   url?: string;
   latencyMs?: number;
   errorMessage?: string;
+  lastSyncAt?: string;
+  hasSyncFailure?: boolean;
 }
 
 export interface SyncResult {
@@ -133,7 +136,10 @@ export function rowToReview(row: any): ReviewItem {
     visualAnalysisStatus: row.visual_analysis_status || undefined,
     visualAnalysisError: row.visual_analysis_error || undefined,
     visualProvider: row.visual_provider || undefined,
-    visualModel: row.visual_model || undefined
+    visualModel: row.visual_model || undefined,
+    publishingStatus: row.publishing_status || undefined,
+    publishingRecord: row.publishing_record || undefined,
+    isSample: Boolean(row.is_sample || isSampleDemoReview(row.id))
   };
 }
 
@@ -171,6 +177,8 @@ export function reviewToRow(review: ReviewItem): Record<string, any> {
     visual_analysis_error: review.visualAnalysisError || null,
     visual_provider: review.visualProvider || null,
     visual_model: review.visualModel || null,
+    publishing_status: review.publishingStatus || null,
+    publishing_record: review.publishingRecord || null,
     updated_at: new Date().toISOString()
   };
 }
@@ -264,21 +272,14 @@ export const brandRepository = {
           .order('updated_at', { ascending: false })
           .limit(1);
 
-        if (!error && data && data.length > 0) {
-          const profile = rowToProfile(data[0]);
-          // Sync local storage mirror
-          brandStorage.saveProfile(profile);
-          return profile;
-        }
-
-        // If table is empty in cloud, check local storage
-        if (!error && data && data.length === 0) {
-          const local = brandStorage.getStoredProfile();
-          if (local) {
-            // Push existing local to cloud
-            await this.saveProfile(local);
-            return local;
+        if (!error && Array.isArray(data)) {
+          if (data.length > 0) {
+            const profile = rowToProfile(data[0]);
+            // Sync local storage mirror
+            brandStorage.saveProfile(profile);
+            return profile;
           }
+          // Legitimate empty profile in remote database (do not auto-push local demo profile)
           return null;
         }
       } catch (err) {
@@ -372,26 +373,14 @@ export const brandRepository = {
           .order('created_at', { ascending: false });
 
         if (!error && Array.isArray(data)) {
-          if (data.length > 0) {
-            const rules = data.map(rowToRule);
-            // Update local cache
-            try {
-              localStorage.setItem('brandguard_brand_rules', JSON.stringify(rules));
-            } catch {
-              // ignore
-            }
-            return rules;
-          } else {
-            // Check if local storage has rules to sync to cloud
-            const localRules = brandStorage.getStoredRules();
-            if (localRules.length > 0) {
-              for (const r of localRules) {
-                await this.saveRule(r);
-              }
-              return localRules;
-            }
-            return [];
+          const rules = data.map(rowToRule);
+          // Update local cache mirror
+          try {
+            localStorage.setItem('brandguard_brand_rules', JSON.stringify(rules));
+          } catch {
+            // ignore
           }
+          return rules;
         }
       } catch (err) {
         console.warn('Supabase rules fetch error, using local storage cache:', err);
@@ -523,26 +512,14 @@ export const brandRepository = {
           .order('created_at', { ascending: false });
 
         if (!error && Array.isArray(data)) {
-          if (data.length > 0) {
-            const reviews = data.map(rowToReview);
-            // Update local storage mirror
-            try {
-              localStorage.setItem('brandguard_brand_reviews', JSON.stringify(reviews));
-            } catch {
-              // ignore
-            }
-            return reviews;
-          } else {
-            // Check if local storage has reviews to sync to cloud
-            const localReviews = brandStorage.getStoredReviews();
-            if (localReviews.length > 0) {
-              for (const item of localReviews) {
-                await this.saveReview(item);
-              }
-              return localReviews;
-            }
-            return [];
+          const reviews = data.map(rowToReview);
+          // Update local storage mirror
+          try {
+            localStorage.setItem('brandguard_brand_reviews', JSON.stringify(reviews));
+          } catch {
+            // ignore
           }
+          return reviews;
         }
       } catch (err) {
         console.warn('Supabase reviews fetch error, using local storage cache:', err);
@@ -685,8 +662,12 @@ export const brandRepository = {
     }
 
     // 3. Sync Reviews
+    // 3. Sync Reviews (skipping built-in demo sample items to avoid polluting cloud database)
     const localReviews = brandStorage.getStoredReviews();
     for (const review of localReviews) {
+      if (isSampleDemoReview(review.id)) {
+        continue;
+      }
       try {
         const row = reviewToRow(review);
         const { error } = await client
