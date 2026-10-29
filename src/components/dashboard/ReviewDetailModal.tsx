@@ -873,7 +873,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
             <div
               className="glass-panel"
               style={{
-                padding: '16px 20px',
+                padding: '16px clamp(14px, 2vw, 20px)',
                 borderRadius: 'var(--radius-md)',
                 background: 'rgba(56, 189, 248, 0.04)',
                 border: '1px solid rgba(56, 189, 248, 0.25)',
@@ -881,10 +881,22 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
-                gap: '14px'
+                gap: '14px',
+                flexShrink: 0,
+                overflow: 'visible',
+                width: '100%',
+                boxSizing: 'border-box'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  flex: '1 1 280px',
+                  minWidth: 0
+                }}
+              >
                 {review.imageAsset.thumbnailDataUrl ? (
                   <img
                     src={review.imageAsset.thumbnailDataUrl}
@@ -895,7 +907,8 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                       borderRadius: '8px',
                       objectFit: 'cover',
                       border: '1px solid var(--border-medium)',
-                      background: '#0B0E14'
+                      background: '#0B0E14',
+                      flexShrink: 0
                     }}
                   />
                 ) : (
@@ -907,16 +920,25 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                       background: 'rgba(255, 255, 255, 0.05)',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      flexShrink: 0
                     }}
                   >
                     <Eye size={22} color="var(--accent-lime)" />
                   </div>
                 )}
 
-                <div>
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere'
+                      }}
+                    >
                       {review.imageAsset.fileName}
                     </span>
                     <span
@@ -927,14 +949,24 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                         borderRadius: '4px',
                         background: 'rgba(56, 189, 248, 0.12)',
                         border: '1px solid rgba(56, 189, 248, 0.3)',
-                        color: '#38BDF8'
+                        color: '#38BDF8',
+                        flexShrink: 0
                       }}
                     >
                       Attached Creative ({(review.imageAsset.fileSize / 1024).toFixed(0)} KB)
                     </span>
                   </div>
 
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)',
+                      marginTop: '4px',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                      lineHeight: 1.45
+                    }}
+                  >
                     {review.imageAsset.altText ? (
                       <span>
                         <strong style={{ color: 'var(--text-tertiary)' }}>Alt Text:</strong> “{review.imageAsset.altText}”
@@ -953,6 +985,7 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 size="sm"
                 onClick={() => setActiveResultsSection('visual')}
                 iconLeft={<Eye size={13} />}
+                style={{ flexShrink: 0 }}
               >
                 Inspect Visual Compliance ({(review.visualFindings || []).length})
               </Button>
@@ -965,7 +998,8 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
               borderRadius: 'var(--radius-md)',
               background: 'rgba(255, 255, 255, 0.02)',
               border: '1px solid var(--border-medium)',
-              padding: '18px'
+              padding: '18px',
+              flexShrink: 0
             }}
           >
             {/* Draft Selector Tabs */}
@@ -1897,7 +1931,9 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                 border: '1px solid var(--border-subtle)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px'
+                gap: '12px',
+                flexShrink: 0,
+                overflow: 'visible'
               }}
             >
               <div
@@ -1939,7 +1975,9 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                     : '1px solid var(--accent-lime-border)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '14px'
+                gap: '14px',
+                flexShrink: 0,
+                overflow: 'visible'
               }}
             >
               <div

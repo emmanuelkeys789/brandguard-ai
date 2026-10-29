@@ -540,6 +540,16 @@ button {
   gap: 20px;
 }
 
+/* Ensure vertical scrolling behaves correctly and no flex child gets crushed */
+.review-modal-body > * {
+  flex-shrink: 0;
+}
+
+/* Prevent inner glass panels from clipping wrapped content or children */
+.review-modal-body .glass-panel {
+  overflow: visible;
+}
+
 .review-modal-footer {
   padding: 12px clamp(16px, 2.5vw, 24px);
   border-top: 1px solid var(--border-subtle);
