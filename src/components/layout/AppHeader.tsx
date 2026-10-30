@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Menu,
   Bell,
@@ -10,7 +10,8 @@ import {
   Check,
   X,
   Database,
-  AlertTriangle
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useBrand } from '../../context/useBrand';
@@ -33,6 +34,41 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   
+  const roleMenuRef = useRef<HTMLDivElement>(null);
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!roleMenuOpen && !workspaceMenuOpen && !notificationOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (roleMenuRef.current && !roleMenuRef.current.contains(target)) {
+        setRoleMenuOpen(false);
+      }
+      if (workspaceMenuRef.current && !workspaceMenuRef.current.contains(target)) {
+        setWorkspaceMenuOpen(false);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(target)) {
+        setNotificationOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setRoleMenuOpen(false);
+        setWorkspaceMenuOpen(false);
+        setNotificationOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [roleMenuOpen, workspaceMenuOpen, notificationOpen]);
+
   const [userSelectedOrg, setUserSelectedOrg] = useState<string | null>(null);
   
   const currentBrandName = brandProfile?.name || 'Axiom Global Enterprise';
@@ -55,7 +91,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           justifyContent: 'space-between',
           position: 'sticky',
           top: 0,
-          zIndex: 40
+          zIndex: 50
         }}
       >
         {/* Left: Mobile hamburger + Workspace Switcher */}
@@ -81,7 +117,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </button>
 
           {/* Organization Switcher Dropdown */}
-          <div style={{ position: 'relative' }}>
+          <div ref={workspaceMenuRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
               style={{
@@ -215,10 +251,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           })()}
 
           {/* Demo Role / Simulated User Selector */}
-          <div style={{ position: 'relative' }}>
+          <div ref={roleMenuRef} style={{ position: 'relative' }}>
             <button
-              onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-              aria-label="Demo Role Selector"
+              onClick={() => {
+                setRoleMenuOpen(!roleMenuOpen);
+                if (workspaceMenuOpen) setWorkspaceMenuOpen(false);
+                if (notificationOpen) setNotificationOpen(false);
+              }}
+              aria-label="DEMO MODE — SIMULATED ROLES"
+              aria-expanded={roleMenuOpen}
+              aria-haspopup="true"
               id="header-role-selector-btn"
               style={{
                 display: 'flex',
@@ -244,7 +286,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   justifyContent: 'center',
                   color: roleColors.color,
                   fontSize: '11px',
-                  fontWeight: 700
+                  fontWeight: 700,
+                  flexShrink: 0
                 }}
               >
                 {currentUser.avatarInitials}
@@ -253,6 +296,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span
+                    className="header-role-prefix"
                     style={{
                       fontSize: '9px',
                       fontFamily: 'var(--font-mono)',
@@ -261,7 +305,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                       letterSpacing: '0.04em'
                     }}
                   >
-                    DEMO ROLE:
+                    DEMO MODE — SIMULATED ROLES:
                   </span>
                   <span
                     style={{
@@ -281,33 +325,59 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 </span>
               </div>
 
-              <ChevronDown size={14} color="var(--text-tertiary)" />
+              <ChevronDown
+                size={14}
+                color="var(--text-tertiary)"
+                style={{
+                  transform: roleMenuOpen ? 'rotate(180deg)' : 'none',
+                  transition: 'transform var(--transition-fast)'
+                }}
+              />
             </button>
 
             {roleMenuOpen && (
               <div
-                className="glass-panel"
+                id="header-role-dropdown-menu"
                 style={{
                   position: 'absolute',
                   top: 'calc(100% + 8px)',
                   right: 0,
-                  width: '320px',
-                  padding: '14px',
-                  zIndex: 70,
-                  boxShadow: 'var(--shadow-lg)'
+                  width: '380px',
+                  maxWidth: 'min(380px, calc(100vw - 32px))',
+                  padding: '16px',
+                  zIndex: 1000,
+                  background: '#0D111A',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: '0 24px 50px -4px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column'
                 }}
               >
-                <div style={{ paddingBottom: '10px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--accent-lime)' }}>
-                      SIMULATED DEMO ROLE
-                    </span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
-                      Evaluation Only
+                <div style={{ paddingBottom: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <ShieldAlert size={14} color="var(--accent-lime)" />
+                      <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.06em', color: 'var(--accent-lime)', fontFamily: 'var(--font-mono)' }}>
+                        DEMO MODE — SIMULATED ROLES
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        color: '#CBD5E1',
+                        letterSpacing: '0.04em'
+                      }}
+                    >
+                      FOR EVALUATION
                     </span>
                   </div>
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
-                    Switch persona to test client-side permission enforcement across Admin, Reviewer, and Editor roles.
+                  <p style={{ fontSize: '11.5px', color: '#94A3B8', margin: 0, lineHeight: 1.45 }}>
+                    These simulated personas allow judges to test governance workflows and role-based permissions immediately without an authentication wall. They do not represent real authentication or enterprise identity management.
                   </p>
                 </div>
 
@@ -325,29 +395,44 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                         style={{
                           display: 'flex',
                           alignItems: 'flex-start',
-                          gap: '10px',
-                          padding: '10px',
+                          gap: '12px',
+                          padding: '12px',
                           borderRadius: 'var(--radius-sm)',
-                          background: isSelected ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.01)',
-                          border: isSelected ? `1px solid ${colors.border}` : '1px solid var(--border-subtle)',
+                          background: isSelected ? 'rgba(255, 255, 255, 0.08)' : '#141A26',
+                          border: isSelected ? `1.5px solid ${colors.border}` : '1px solid rgba(255, 255, 255, 0.08)',
                           textAlign: 'left',
                           cursor: 'pointer',
-                          transition: 'all var(--transition-fast)'
+                          transition: 'all var(--transition-fast)',
+                          position: 'relative',
+                          width: '100%'
+                        }}
+                        className="role-selector-option-btn"
+                        onMouseEnter={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.background = '#1A2234';
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.16)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.background = '#141A26';
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                          }
                         }}
                       >
                         <div
                           style={{
-                            width: '28px',
-                            height: '28px',
+                            width: '32px',
+                            height: '32px',
                             borderRadius: '50%',
                             background: colors.bg,
-                            border: `1px solid ${colors.border}`,
+                            border: `1.5px solid ${colors.border}`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             color: colors.color,
-                            fontSize: '11px',
-                            fontWeight: 700,
+                            fontSize: '12px',
+                            fontWeight: 800,
                             flexShrink: 0,
                             marginTop: '2px'
                           }}
@@ -356,34 +441,49 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                         </div>
 
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '2px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF' }}>
                               {user.name}
                             </span>
                             <span
                               style={{
                                 fontSize: '10px',
                                 fontWeight: 700,
-                                padding: '1px 6px',
+                                padding: '2px 8px',
                                 borderRadius: 'var(--radius-full)',
                                 background: colors.bg,
-                                color: colors.color
+                                border: `1px solid ${colors.border}`,
+                                color: colors.color,
+                                letterSpacing: '0.03em'
                               }}
                             >
                               {user.role}
                             </span>
                           </div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+                          <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '4px', fontWeight: 500 }}>
                             {user.title}
                           </div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                          <div style={{ fontSize: '11.5px', color: '#CBD5E1', lineHeight: 1.4 }}>
                             {user.description}
                           </div>
                         </div>
 
                         {isSelected && (
-                          <div style={{ marginTop: '4px' }}>
-                            <Check size={14} color="var(--accent-lime)" />
+                          <div
+                            style={{
+                              marginTop: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              background: 'rgba(214, 255, 112, 0.15)',
+                              border: '1px solid var(--accent-lime)',
+                              flexShrink: 0
+                            }}
+                          >
+                            <Check size={12} color="var(--accent-lime)" strokeWidth={3} />
                           </div>
                         )}
                       </button>
@@ -391,8 +491,21 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   })}
                 </div>
 
-                <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-                  Note: Role switching is simulated in local storage for hackathon demonstration.
+                <div
+                  style={{
+                    marginTop: '12px',
+                    paddingTop: '10px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '10.5px',
+                    color: '#64748B',
+                    lineHeight: 1.4
+                  }}
+                >
+                  <Info size={13} style={{ flexShrink: 0, color: 'var(--accent-lime)' }} />
+                  <span>Simulated in-browser session • Direct judge access with zero authentication walls</span>
                 </div>
               </div>
             )}
@@ -409,7 +522,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </Button>
 
           {/* Notifications Trigger */}
-          <div style={{ position: 'relative' }}>
+          <div ref={notificationRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setNotificationOpen(!notificationOpen)}
               aria-label="Notifications"
@@ -586,6 +699,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       <style>{`
         @media (min-width: 768px) {
           .mobile-header-menu-btn {
+            display: none !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .header-role-prefix {
             display: none !important;
           }
         }

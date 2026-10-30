@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   CheckCircle2,
@@ -146,6 +146,20 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [showPayloadPreview, setShowPayloadPreview] = useState<boolean>(false);
+
+  // Dual-mode publishing state (Authenticated SSO vs Zero-Login Demo)
+  const [hasActiveAuthSession, setHasActiveAuthSession] = useState<boolean>(false);
+  const [showAuthRequiredModal, setShowAuthRequiredModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    publishingService.hasActiveSession().then((active) => {
+      if (isMounted) setHasActiveAuthSession(active);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Track whether the draft in editor has been edited compared to base draft
   const baseSavedDraft =
@@ -479,6 +493,13 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
       showToast('error', 'Cannot Publish Unapproved Content', `Review status is currently "${review.status}". Explicit human approval ("Approved") is strictly required prior to publication.`);
       return;
     }
+
+    // Zero-Login Demo Mode check: explain governance requirement without triggering raw HTTP 401
+    if (!hasActiveAuthSession) {
+      setShowAuthRequiredModal(true);
+      return;
+    }
+
     setIsPublishing(true);
     setPublishError(null);
 
@@ -489,6 +510,11 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
         userRole: currentUser.role,
         userId: currentUser.id
       });
+
+      if (result.status === 'unauthenticated') {
+        setShowAuthRequiredModal(true);
+        return;
+      }
 
       if (result.status === 'published' && result.record) {
         const now = new Date().toISOString();
@@ -2226,36 +2252,88 @@ export const ReviewDetailModal: React.FC<ReviewDetailModalProps> = ({
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
                     {can('publish_review') ? (
                       <>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={handlePublishReview}
-                          disabled={isPublishing}
-                          iconLeft={
-                            isPublishing ? (
-                              <Loader2 size={13} className="animate-spin" />
-                            ) : (
-                              <Send size={13} />
-                            )
-                          }
-                          id="dispatch-webhook-btn"
-                        >
-                          {isPublishing
-                            ? 'Dispatching Webhook...'
-                            : 'Publish via Webhook (POST /api/publish)'}
-                        </Button>
+                        {!hasActiveAuthSession ? (
+                          <>
+                            {/* Primary highlighted action for Zero-Login Demo / Judges */}
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleSimulateDemoPublish}
+                              disabled={isPublishing}
+                              iconLeft={<CheckCircle2 size={13} />}
+                              id="simulate-publish-btn"
+                            >
+                              Simulate Webhook Delivery (Offline Demo)
+                            </Button>
 
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={handleSimulateDemoPublish}
-                          disabled={isPublishing}
-                          iconLeft={<CheckCircle2 size={13} />}
-                          id="simulate-publish-btn"
-                          style={{ borderColor: 'rgba(6, 182, 212, 0.4)', color: '#06B6D4' }}
-                        >
-                          Simulate Webhook Delivery (Offline Demo)
-                        </Button>
+                            {/* Secondary action with clear SSO requirement badge */}
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={handlePublishReview}
+                              disabled={isPublishing}
+                              iconLeft={
+                                isPublishing ? (
+                                  <Loader2 size={13} className="animate-spin" />
+                                ) : (
+                                  <Send size={13} />
+                                )
+                              }
+                              id="dispatch-webhook-btn"
+                              style={{ borderColor: 'var(--border-subtle)' }}
+                            >
+                              <span>Publish via Webhook (POST /api/publish)</span>
+                              <span
+                                style={{
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  padding: '1px 6px',
+                                  borderRadius: '3px',
+                                  background: 'rgba(251, 191, 36, 0.12)',
+                                  color: '#FBBF24',
+                                  border: '1px solid rgba(251, 191, 36, 0.3)',
+                                  marginLeft: '4px',
+                                  letterSpacing: '0.03em'
+                                }}
+                              >
+                                Requires Live SSO
+                              </span>
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handlePublishReview}
+                              disabled={isPublishing}
+                              iconLeft={
+                                isPublishing ? (
+                                  <Loader2 size={13} className="animate-spin" />
+                                ) : (
+                                  <Send size={13} />
+                                )
+                              }
+                              id="dispatch-webhook-btn"
+                            >
+                              {isPublishing
+                                ? 'Dispatching Webhook...'
+                                : 'Publish via Webhook (POST /api/publish)'}
+                            </Button>
+
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={handleSimulateDemoPublish}
+                              disabled={isPublishing}
+                              iconLeft={<CheckCircle2 size={13} />}
+                              id="simulate-publish-btn"
+                              style={{ borderColor: 'rgba(6, 182, 212, 0.4)', color: '#06B6D4' }}
+                            >
+                              Simulate Webhook Delivery (Offline Demo)
+                            </Button>
+                          </>
+                        )}
                       </>
                     ) : (
                       <div
@@ -2608,16 +2686,69 @@ ${JSON.stringify(
                   Reject
                 </Button>
 
-                {/* Approve Button */}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setConfirmAction('Approve')}
-                  iconLeft={<CheckCircle2 size={14} />}
-                  id="review-approve-btn"
-                >
-                  Approve
-                </Button>
+                {/* Dynamic Action: Publish after approval vs Approve if pending */}
+                {review.status === 'Approved' ? (
+                  can('publish_review') && (
+                    !hasActiveAuthSession ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleSimulateDemoPublish}
+                        disabled={isPublishing}
+                        iconLeft={<CheckCircle2 size={14} />}
+                        id="footer-simulate-publish-btn"
+                      >
+                        Simulate Webhook Delivery
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handlePublishReview}
+                        disabled={isPublishing}
+                        iconLeft={
+                          isPublishing ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Send size={13} />
+                          )
+                        }
+                        id="footer-publish-webhook-btn"
+                      >
+                        {isPublishing ? 'Dispatching...' : 'Publish via Webhook'}
+                      </Button>
+                    )
+                  )
+                ) : review.status === 'Published' ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 10px',
+                      borderRadius: 'var(--radius-xs)',
+                      background: 'rgba(6, 182, 212, 0.12)',
+                      border: '1px solid rgba(6, 182, 212, 0.35)',
+                      color: '#06B6D4',
+                      fontSize: '11px',
+                      fontWeight: 700
+                    }}
+                  >
+                    <Check size={12} />
+                    <span>Published</span>
+                  </div>
+                ) : (
+                  /* Approve Button for pending drafts */
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setConfirmAction('Approve')}
+                    iconLeft={<CheckCircle2 size={14} />}
+                    id="review-approve-btn"
+                  >
+                    Approve
+                  </Button>
+                )}
               </div>
             ) : (
               <div
@@ -2640,6 +2771,121 @@ ${JSON.stringify(
           </div>
         </div>
       </div>
+
+      {/* Enterprise Authentication Required Governance Modal */}
+      {showAuthRequiredModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            zIndex: 1100
+          }}
+          onClick={() => setShowAuthRequiredModal(false)}
+        >
+          <div
+            style={{
+              background: '#0D111A',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: '0 24px 50px -4px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+              width: '100%',
+              maxWidth: '520px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    background: 'rgba(251, 191, 36, 0.12)',
+                    border: '1px solid rgba(251, 191, 36, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Lock size={18} color="#FBBF24" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+                    Enterprise Webhook Dispatch
+                  </h3>
+                  <span style={{ fontSize: '11px', color: '#FBBF24', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                    CORPORATE SSO CREDENTIALS REQUIRED
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAuthRequiredModal(false)}
+                aria-label="Close dialog"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-tertiary)',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#CBD5E1', lineHeight: 1.55 }}>
+              <p style={{ margin: '0 0 10px 0' }}>
+                The serverless publishing endpoint (<code>POST /api/publish</code>) is an authoritative production gateway. It strictly requires a live, cryptographically verified Supabase Bearer token, a confirmed Admin/Reviewer assignment in the server&apos;s PostgreSQL database, and HMAC-SHA256 signing secrets.
+              </p>
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(214, 255, 112, 0.05)',
+                  border: '1px solid var(--accent-lime-border)',
+                  fontSize: '12px',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                <strong style={{ color: 'var(--accent-lime)', display: 'block', marginBottom: '2px' }}>
+                  Hackathon Judge &amp; Demo Guidance:
+                </strong>
+                Because this workspace is running in <strong>Zero-Login Demo Mode</strong>, external corporate SSO tokens are intentionally bypassed. Use <strong>Offline Demo Simulation</strong> to verify the complete publication pipeline, idempotency derivation, signed headers inspection, and permanent audit history.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <Button variant="secondary" size="sm" onClick={() => setShowAuthRequiredModal(false)}>
+                Dismiss
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setShowAuthRequiredModal(false);
+                  handleSimulateDemoPublish();
+                }}
+                iconLeft={<CheckCircle2 size={14} />}
+                id="modal-run-demo-sim-btn"
+              >
+                Run Offline Demo Simulation
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

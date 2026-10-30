@@ -89,11 +89,11 @@ export const SettingsTab: React.FC = () => {
                     color: getRoleBadgeColors(currentRole).color
                   }}
                 >
-                  SIMULATED DEMO ROLE
+                  DEMO MODE — SIMULATED ROLES
                 </span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                Simulated multi-role workspace workflow. Switch active role to test permission enforcement.
+                Simulated multi-role workspace workflow for evaluation. Switch active persona to test client-side and server permission enforcement across Admin, Reviewer, and Editor roles without authentication.
               </div>
             </div>
           </div>

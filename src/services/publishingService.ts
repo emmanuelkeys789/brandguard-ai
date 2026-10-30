@@ -11,7 +11,7 @@ export interface PublishReviewClientOptions {
 }
 
 export interface PublishReviewClientResult {
-  status: 'published' | 'failed' | 'unconfigured' | 'error';
+  status: 'published' | 'failed' | 'unconfigured' | 'error' | 'unauthenticated';
   httpStatus: number;
   record?: PublishingRecord;
   message?: string;
@@ -28,6 +28,22 @@ export const publishingService = {
     handler: ((options: PublishReviewClientOptions) => Promise<PublishReviewClientResult>) | null
   ): void {
     mockPublishHandler = handler;
+  },
+
+  /**
+   * Safe check for an active authenticated Supabase session.
+   * Returns true only if a valid, non-empty session access token is present.
+   */
+  async hasActiveSession(): Promise<boolean> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return false;
+    }
+    try {
+      const sessionRes = await supabase.auth.getSession();
+      return Boolean(sessionRes?.data?.session?.access_token?.trim());
+    } catch {
+      return false;
+    }
   },
 
   /**
@@ -49,6 +65,29 @@ export const publishingService = {
       return mockPublishHandler(options);
     }
 
+    // Resolve bearer token from explicit option or live Supabase Auth session
+    let bearerToken = options.token?.trim();
+    if (!bearerToken && isSupabaseConfigured() && supabase) {
+      try {
+        const sessionRes = await supabase.auth.getSession();
+        const sessionToken = sessionRes?.data?.session?.access_token;
+        if (sessionToken) {
+          bearerToken = sessionToken.trim();
+        }
+      } catch {
+        // ignore session retrieval error
+      }
+    }
+
+    // Prevent unauthenticated requests from unnecessarily reaching the publishing endpoint
+    if (!bearerToken) {
+      return {
+        status: 'unauthenticated',
+        httpStatus: 401,
+        error: 'Authentication Required: Direct webhook publishing requires an active, verified Supabase Auth session. In zero-login evaluation mode, please use the Offline Demo Simulation.'
+      };
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 16000); // 16s timeout
 
@@ -56,19 +95,6 @@ export const publishingService = {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
-
-      let bearerToken = options.token?.trim();
-      if (!bearerToken && isSupabaseConfigured() && supabase) {
-        try {
-          const sessionRes = await supabase.auth.getSession();
-          const sessionToken = sessionRes?.data?.session?.access_token;
-          if (sessionToken) {
-            bearerToken = sessionToken.trim();
-          }
-        } catch {
-          // ignore session retrieval error
-        }
-      }
 
       if (bearerToken) {
         headers['Authorization'] = `Bearer ${bearerToken}`;

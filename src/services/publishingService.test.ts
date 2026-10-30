@@ -245,4 +245,22 @@ describe('Publishing Service & End-to-End Review Journey Tests', () => {
     assert.equal(reloaded.visualAnalysisStatus, 'completed');
     assert.equal(reloaded.visualProvider, 'gemini');
   });
+
+  test('6. hasActiveSession safely reports false when Supabase is unconfigured or session is absent', async () => {
+    const hasSession = await publishingService.hasActiveSession();
+    assert.equal(hasSession, false);
+  });
+
+  test('7. requestPublishReview returns unauthenticated (401) client-side when no token or session exists', async () => {
+    const result = await publishingService.requestPublishReview({
+      reviewId: 'rev_zero_login_demo_123',
+      userRole: 'Admin',
+      userId: 'usr_admin_sarah'
+    });
+
+    assert.equal(result.status, 'unauthenticated');
+    assert.equal(result.httpStatus, 401);
+    assert.ok(result.error?.includes('Authentication Required'));
+    assert.ok(result.error?.includes('Offline Demo Simulation'));
+  });
 });
